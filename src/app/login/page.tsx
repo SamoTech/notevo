@@ -9,96 +9,53 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
-  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
   const router = useRouter()
 
-  const handleAuth = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
-    setMessage('')
+    setLoading(true); setError('')
     const supabase = createClient()
-
-    if (mode === 'signup') {
-      const { error } = await supabase.auth.signUp({ email, password })
-      if (error) setMessage(error.message)
-      else setMessage('Check your email to confirm your account.')
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) setMessage(error.message)
-      else router.push('/dashboard')
-    }
-    setLoading(false)
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) { setError(error.message); setLoading(false) }
+    else router.push('/dashboard')
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{background: 'var(--color-bg)'}}>
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 mb-6">
-            <svg width="32" height="32" viewBox="0 0 28 28" fill="none">
-              <rect width="28" height="28" rx="7" fill="#01696f"/>
-              <path d="M7 8h14M7 13h10M7 18h8" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-              <circle cx="21" cy="18" r="4" fill="#0f3638" stroke="white" strokeWidth="1.5"/>
-              <path d="M21 16.5v1.5l1 1" stroke="white" strokeWidth="1.2" strokeLinecap="round"/>
-            </svg>
-            <span className="text-2xl font-serif">Notevo</span>
-          </Link>
-          <h1 className="text-2xl font-serif font-light text-gray-900">
-            {mode === 'signin' ? 'Welcome back' : 'Create account'}
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {mode === 'signin' ? 'Sign in to access your notes' : 'Start writing private notes'}
-          </p>
+      <div style={{width: '100%', maxWidth: 400, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-xl)', padding: '2.5rem'}}>
+        <div className="flex items-center justify-center gap-2 mb-8">
+          <svg width="24" height="24" viewBox="0 0 28 28" fill="none" style={{color: 'var(--color-primary)'}}>
+            <rect x="4" y="4" width="20" height="24" rx="3" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+            <path d="M9 10h10M9 14h10M9 18h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <span style={{fontFamily: 'var(--font-display)', fontSize: 'var(--text-lg)'}}>Notevo</span>
         </div>
+        <h1 style={{fontSize: 'var(--text-lg)', fontWeight: 600, textAlign: 'center', marginBottom: '0.5rem'}}>Welcome back</h1>
+        <p style={{fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', textAlign: 'center', marginBottom: '2rem'}}>Sign in to your notes</p>
 
-        <form onSubmit={handleAuth} className="space-y-4">
+        {error && <div style={{background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: 'var(--text-sm)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem'}}>{error}</div>}
+
+        <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
-            />
+            <label style={{display: 'block', fontSize: 'var(--text-sm)', fontWeight: 500, marginBottom: '0.5rem'}}>Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
+              style={{width: '100%', padding: '0.625rem 0.875rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-bg)', fontSize: 'var(--text-sm)', outline: 'none'}}
+              className="focus:ring-2 focus:ring-teal-500" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
-            />
+            <label style={{display: 'block', fontSize: 'var(--text-sm)', fontWeight: 500, marginBottom: '0.5rem'}}>Password</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
+              style={{width: '100%', padding: '0.625rem 0.875rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-bg)', fontSize: 'var(--text-sm)', outline: 'none'}}
+              className="focus:ring-2 focus:ring-teal-500" />
           </div>
-
-          {message && (
-            <p className={`text-sm p-3 rounded-lg ${
-              message.includes('Check') ? 'bg-teal-50 text-teal-700' : 'bg-red-50 text-red-600'
-            }`}>{message}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-xl transition-colors text-sm"
-          >
-            {loading ? 'Please wait...' : mode === 'signin' ? 'Sign in' : 'Create account'}
+          <button type="submit" disabled={loading}
+            style={{width: '100%', background: 'var(--color-primary)', color: 'white', padding: '0.75rem', borderRadius: 'var(--radius-lg)', fontSize: 'var(--text-sm)', fontWeight: 500, opacity: loading ? 0.6 : 1}}>
+            {loading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
-
-        <p className="text-center text-sm text-gray-500 mt-6">
-          {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
-          <button
-            onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setMessage('') }}
-            className="text-teal-600 hover:text-teal-700 font-medium"
-          >
-            {mode === 'signin' ? 'Sign up' : 'Sign in'}
-          </button>
+        <p style={{textAlign: 'center', fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginTop: '1.5rem'}}>
+          No account? <Link href="/signup" style={{color: 'var(--color-primary)', fontWeight: 500}}>Sign up free</Link>
         </p>
       </div>
     </div>
