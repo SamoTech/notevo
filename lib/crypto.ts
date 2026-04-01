@@ -9,8 +9,12 @@ function bufToBase64(buf: ArrayBuffer | Uint8Array): string {
   return btoa(String.fromCharCode(...bytes))
 }
 
-function base64ToBuf(b64: string): Uint8Array {
-  return Uint8Array.from(atob(b64), c => c.charCodeAt(0))
+function base64ToBuf(b64: string): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0)) as Uint8Array<ArrayBuffer>
+}
+
+function toBuffer(u8: Uint8Array): ArrayBuffer {
+  return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer
 }
 
 async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
@@ -23,7 +27,7 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
     ['deriveBits', 'deriveKey']
   )
   return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: toBuffer(salt), iterations: 100000, hash: 'SHA-256' },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
     false,
@@ -39,9 +43,9 @@ export async function encryptNote(
   const key = await deriveKey(password, salt)
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: toBuffer(iv) },
     key,
-    new TextEncoder().encode(plaintext)
+    toBuffer(new TextEncoder().encode(plaintext))
   )
   return {
     ciphertext: bufToBase64(ciphertext),
@@ -59,9 +63,9 @@ export async function decryptNote(
   const iv = base64ToBuf(payload.iv)
   const ciphertext = base64ToBuf(payload.ciphertext)
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: toBuffer(iv) },
     key,
-    ciphertext
+    toBuffer(ciphertext)
   )
   return new TextDecoder().decode(decrypted)
 }
