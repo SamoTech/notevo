@@ -25,23 +25,46 @@ export default function Signup() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (password !== confirm)  { setError('Passwords do not match'); return }
-    if (password.length < 8)   { setError('Password must be at least 8 characters'); return }
-    setLoading(true); setError('')
-    const supabase = createClient()
-    const { data, error: sbError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` }
-    })
-    if (sbError) {
-      setError(sbError.message)
+    if (password !== confirm) { setError('Passwords do not match'); return }
+    if (password.length < 8)  { setError('Password must be at least 8 characters'); return }
+
+    setLoading(true)
+    setError('')
+
+    try {
+      const supabase = createClient()
+      const { data, error: sbError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      })
+
+      if (sbError) {
+        setError(sbError.message)
+        setLoading(false)
+        return
+      }
+
+      // Email confirmations disabled → session returned immediately
+      if (data?.session) {
+        router.refresh()
+        router.push('/dashboard')
+        return
+      }
+
+      // Supabase already has this email (returns fake success with no session)
+      if (data?.user?.identities?.length === 0) {
+        setError('An account with this email already exists. Try signing in instead.')
+        setLoading(false)
+        return
+      }
+
+      // Normal flow: confirmation email sent
       setLoading(false)
-    } else if (data?.session) {
-      router.refresh()
-      router.push('/dashboard')
-    } else {
       setDone(true)
+    } catch (err) {
+      setError('Something went wrong. Please try again.')
+      setLoading(false)
     }
   }
 
@@ -53,7 +76,8 @@ export default function Signup() {
         </div>
         <h2 style={{fontSize:'var(--text-lg)', fontWeight:600, marginBottom:'0.75rem', color:'var(--color-text)'}}>Check your inbox</h2>
         <p style={{fontSize:'var(--text-sm)', color:'var(--color-text-muted)', lineHeight:1.6}}>
-          We sent a confirmation link to <strong style={{color:'var(--color-text)'}}>{email}</strong>.
+          We sent a confirmation link to{' '}
+          <strong style={{color:'var(--color-text)'}}>{email}</strong>.
           Click it to activate your account.
         </p>
         <p style={{fontSize:'var(--text-xs)', color:'var(--color-text-faint)', marginTop:'1rem'}}>
@@ -96,6 +120,7 @@ export default function Signup() {
               onBlur={e => (e.target.style.borderColor='var(--color-border)')}
             />
           </div>
+
           <div>
             <label style={{display:'block', fontSize:'var(--text-sm)', fontWeight:500, marginBottom:'0.4rem', color:'var(--color-text)'}}>Password</label>
             <div style={{position:'relative'}}>
@@ -123,6 +148,7 @@ export default function Signup() {
               </div>
             )}
           </div>
+
           <div>
             <label style={{display:'block', fontSize:'var(--text-sm)', fontWeight:500, marginBottom:'0.4rem', color:'var(--color-text)'}}>Confirm password</label>
             <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required
@@ -135,9 +161,16 @@ export default function Signup() {
               <p style={{fontSize:'var(--text-xs)', color:'var(--color-error)', marginTop:'0.375rem'}}>Passwords don&apos;t match</p>
             )}
           </div>
+
           <button type="submit" disabled={loading}
             style={{width:'100%', background:'var(--color-primary)', color:'white', padding:'0.75rem', borderRadius:'var(--radius-lg)', fontSize:'var(--text-sm)', fontWeight:500, border:'none', cursor:loading?'not-allowed':'pointer', opacity:loading?0.65:1, transition:'opacity 180ms', marginTop:'0.25rem'}}>
-            {loading ? 'Creating account…' : 'Create account →'}
+            {loading
+              ? <span style={{display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem'}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{animation:'spin 0.8s linear infinite'}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                  Creating account…
+                </span>
+              : 'Create account →'
+            }
           </button>
         </form>
 
