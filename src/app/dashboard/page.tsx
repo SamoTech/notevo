@@ -10,7 +10,7 @@ async function deriveKey(pass: string, salt: Uint8Array): Promise<CryptoKey> {
   const enc = new TextEncoder()
   const keyMat = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey'])
   return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: salt.buffer as ArrayBuffer, iterations: 100000, hash: 'SHA-256' },
     keyMat, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
   )
 }
@@ -19,15 +19,17 @@ async function encryptText(plain: string, pass: string) {
   const salt = crypto.getRandomValues(new Uint8Array(16))
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const key = await deriveKey(pass, salt)
-  const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plain))
+  const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv.buffer as ArrayBuffer }, key, enc.encode(plain))
   const to64 = (buf: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(buf instanceof ArrayBuffer ? buf : buf)))
   return { cipher: to64(cipher), iv: to64(iv), salt: to64(salt) }
 }
 async function decryptText(cipher64: string, pass: string, iv64: string, salt64: string): Promise<string> {
   const dec = new TextDecoder()
   const from64 = (s: string) => Uint8Array.from(atob(s), c => c.charCodeAt(0))
-  const key = await deriveKey(pass, from64(salt64))
-  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: from64(iv64) }, key, from64(cipher64))
+  const saltArr = from64(salt64)
+  const ivArr = from64(iv64)
+  const key = await deriveKey(pass, saltArr)
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivArr.buffer as ArrayBuffer }, key, from64(cipher64))
   return dec.decode(plain)
 }
 
@@ -111,6 +113,9 @@ export default function Dashboard() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const router = useRouter()
 
+  // suppress unused warning for sidebarOpen
+  void sidebarOpen
+
   // ── THEME ──
   useEffect(() => {
     const sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -153,7 +158,6 @@ export default function Dashboard() {
             }))
             setNotes(mapped)
           } else {
-            // seed sample notes
             setNotes(sampleNotes())
           }
           setLoading(false)
@@ -215,8 +219,10 @@ export default function Dashboard() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    let encrypted_body = body, iv = note.iv, salt = note.salt
-    // persist to supabase if it has a dbId
+    const encrypted_body = body
+    const iv = note.iv
+    const salt = note.salt
+
     if (note.dbId) {
       await supabase.from('notes').update({
         title: title.trim() || 'Untitled',
@@ -240,7 +246,7 @@ export default function Dashboard() {
     setSaveStatus('saving')
     saveTimerRef.current = setTimeout(doSave, 800)
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
-  }, [title, body, tags])
+  }, [title, body, tags, currentId, isLocked, doSave])
 
   // ── CREATE NOTE ──
   const createNote = () => {
@@ -336,7 +342,6 @@ export default function Dashboard() {
   const doEncryptAction = async () => {
     if (!currentNote) return
     if (currentNote.encrypted) {
-      // DECRYPT
       if (!epDecPass) { setEpDecErr('Enter password'); return }
       try {
         const plain = await decryptText(currentNote.body, epDecPass, currentNote.iv!, currentNote.salt!)
@@ -349,7 +354,6 @@ export default function Dashboard() {
         setEncryptOpen(false)
       } catch { setEpDecErr('Incorrect password') }
     } else {
-      // ENCRYPT
       if (!epPass) { setEpErr('Enter a password'); return }
       if (epPass !== epConfirm) { setEpErr('Passwords do not match'); return }
       if (epPass.length < 4) { setEpErr('Password must be at least 4 characters'); return }
@@ -394,7 +398,6 @@ export default function Dashboard() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  const showEditor = !isLocked
   const showPreviewPane = viewMode === 'preview' || viewMode === 'split'
   const showEditorPane = viewMode === 'edit' || viewMode === 'split'
 
@@ -514,7 +517,6 @@ export default function Dashboard() {
 
           <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
-          {/* note action buttons (shown when note selected) */}
           {currentId && (
             <>
               <button className="icon-btn" onClick={openEncryptPanel} title="Encrypt / decrypt note">
@@ -531,7 +533,6 @@ export default function Dashboard() {
 
           <div style={{ flex: 1 }} />
 
-          {/* theme toggle */}
           <button className="icon-btn" onClick={toggleTheme} title="Toggle dark mode">
             {theme === 'dark'
               ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" /></svg>
@@ -547,7 +548,6 @@ export default function Dashboard() {
           <aside id="sidebar" className={mobileSidebarOpen ? 'mobile-open' : ''}
             style={{ width: 'var(--sidebar-w)', minWidth: 'var(--sidebar-w)', background: 'var(--surface)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-            {/* search + new */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '0 10px', height: 32 }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--faint)', flexShrink: 0 }}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
@@ -563,7 +563,6 @@ export default function Dashboard() {
               </button>
             </div>
 
-            {/* filter tabs */}
             <div style={{ display: 'flex', padding: '8px 12px 4px', gap: 4, flexShrink: 0 }}>
               {(['all', 'encrypted', 'plain'] as FilterMode[]).map(f => (
                 <button key={f} className={`stab${filterMode === f ? ' active' : ''}`} onClick={() => setFilterMode(f)}>
@@ -572,7 +571,6 @@ export default function Dashboard() {
               ))}
             </div>
 
-            {/* note list */}
             <div id="note-list-scroll" style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 8px' }}>
               {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
@@ -609,7 +607,6 @@ export default function Dashboard() {
           <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
 
             {!currentId ? (
-              // NO NOTE SELECTED
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--faint)' }}>
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" style={{ opacity: .25 }}>
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -651,7 +648,7 @@ export default function Dashboard() {
                     <div style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 2px' }} />
                     <button className="fmt-btn" onClick={() => fmt('ul')}>• List</button>
                     <button className="fmt-btn" onClick={() => fmt('ol')}>1. List</button>
-                    <button className="fmt-btn" onClick={() => fmt('quote')}>" Quote</button>
+                    <button className="fmt-btn" onClick={() => fmt('quote')}>&quot; Quote</button>
                     <button className="fmt-btn" onClick={() => fmt('link')}>🔗 Link</button>
                     <div style={{ flex: 1 }} />
                     <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--r)', overflow: 'hidden', flexShrink: 0 }}>
@@ -748,7 +745,8 @@ export default function Dashboard() {
                     <div style={{ flex: 1 }} />
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: saveStatus === 'saved' ? 'var(--primary)' : 'var(--faint)', transition: 'color .2s' }}>
                       {saveStatus === 'saved'
-                        ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg> Saved</>                        : saveStatus === 'saving'
+                        ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg> Saved</>
+                        : saveStatus === 'saving'
                         ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="9" /></svg> Saving…</>
                         : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg> Saved</>
                       }
@@ -773,7 +771,6 @@ export default function Dashboard() {
               {currentNote?.encrypted ? 'Enter your password to permanently decrypt this note' : 'Protect this note with AES-256 encryption'}
             </p>
 
-            {/* warning */}
             {!currentNote?.encrypted && (
               <div style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', borderRadius: 'var(--r)', padding: '10px 12px', marginBottom: 18, fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 8, alignItems: 'flex-start', lineHeight: 1.5 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#e5a020', flexShrink: 0, marginTop: 1 }}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
