@@ -79,8 +79,7 @@ interface LocalNote {
   salt: string | null
   createdAt: number
   updatedAt: number
-  dbId?: string        // present = already persisted in Supabase
-  isNew?: boolean      // true = needs INSERT on first save
+  dbId?: string
 }
 
 export default function Dashboard() {
@@ -109,12 +108,28 @@ export default function Dashboard() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [loading, setLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
-  const dbWasEmpty = useRef(false)
+
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // FIX: guard against concurrent saves causing duplicate INSERTs
+  // Ref-based save state — never stale inside doSave
   const isSavingRef = useRef(false)
+  // Track which local IDs have already been INSERTed (maps localId -> dbId)
+  const persistedRef = useRef<Record<string, string>>({})
+  // Always-current mirrors of editor state for use inside doSave
+  const currentIdRef = useRef<string | null>(null)
+  const notesRef = useRef<LocalNote[]>([])
+  const titleRef = useRef('')
+  const bodyRef = useRef('')
+  const tagsRef = useRef<string[]>([])
+
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const router = useRouter()
+
+  // Keep refs in sync with state
+  useEffect(() => { currentIdRef.current = currentId }, [currentId])
+  useEffect(() => { notesRef.current = notes }, [notes])
+  useEffect(() => { titleRef.current = title }, [title])
+  useEffect(() => { bodyRef.current = body }, [body])
+  useEffect(() => { tagsRef.current = tags }, [tags])
 
   // ── THEME ──
   useEffect(() => {
@@ -162,9 +177,10 @@ export default function Dashboard() {
               createdAt: new Date(n.created_at).getTime(),
               updatedAt: new Date(n.updated_at).getTime(),
             }))
+            // Pre-populate persistedRef so existing notes are never re-INSERTed
+            mapped.forEach(n => { persistedRef.current[n.id] = n.id })
             setNotes(mapped)
           } else {
-            dbWasEmpty.current = true
             setNotes(sampleNotes())
           }
           setLoading(false)
@@ -179,14 +195,12 @@ export default function Dashboard() {
         body: '# Welcome to Notevo\n\nA **private**, encrypted note-taking app.\n\n## Features\n\n- ✅ Markdown editing with live preview\n- 🔐 AES-256 note encryption\n- 🏷️ Tags for organisation\n- 💾 Auto-save\n\nStart editing or press **+** to create a new one.',
         tags: ['welcome', 'demo'], encrypted: false, iv: null, salt: null,
         createdAt: Date.now() - 86400000, updatedAt: Date.now() - 3600000,
-        isNew: true
       },
       {
         id: uid(), title: 'Markdown cheatsheet',
         body: '# Markdown Cheatsheet\n\n**Bold**, *Italic*, `inline code`\n\n## Lists\n\n- Item one\n- Item two\n\n## Quote\n\n> The best way to predict the future is to invent it.',
         tags: ['reference'], encrypted: false, iv: null, salt: null,
         createdAt: Date.now() - 3600000, updatedAt: Date.now() - 600000,
-        isNew: true
       }
     ]
   }
@@ -219,68 +233,86 @@ export default function Dashboard() {
   const currentNote = notes.find(n => n.id === currentId) || null
   const isLocked = !!currentNote?.encrypted && unlocked[currentId!] === undefined
 
-  // ── AUTOSAVE ──
+  // ── AUTOSAVE — reads from refs, never from stale closure ──
   const doSave = useCallback(async () => {
-    if (!currentId || !currentNote) return
-    // FIX: skip if a save is already in-flight to prevent duplicate INSERTs
+    const id = currentIdRef.current
+    if (!id) return
     if (isSavingRef.current) return
     isSavingRef.current = true
 
-    const note = currentNote
+    const note = notesRef.current.find(n => n.id === id)
+    if (!note) { isSavingRef.current = false; return }
+
     setSaveStatus('saving')
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { isSavingRef.current = false; return }
 
-    const titleVal = title.trim() || 'Untitled'
+    const titleVal = titleRef.current.trim() || 'Untitled'
+    // For encrypted notes persist the cipher stored in note.body, not the plaintext editor state
+    const encrypted_body = note.encrypted ? note.body : bodyRef.current
+    const currentTags = tagsRef.current
 
-    // FIX: for encrypted notes, persist the cipher (note.body) not the plaintext editor state
-    const encrypted_body = note.encrypted ? note.body : body
-    const iv = note.iv
-    const salt = note.salt
+    const existingDbId = persistedRef.current[id]
 
-    if (!note.dbId || note.isNew) {
-      const { data: inserted } = await supabase.from('notes').insert({
+    if (!existingDbId) {
+      // First save — INSERT
+      const { data: inserted, error } = await supabase.from('notes').insert({
         user_id: user.id,
         title: titleVal,
         encrypted_body,
-        iv,
-        salt,
-        tags,
+        iv: note.iv,
+        salt: note.salt,
+        tags: currentTags,
         is_encrypted: note.encrypted,
         created_at: new Date(note.createdAt).toISOString(),
         updated_at: new Date().toISOString(),
       }).select('id').single()
 
-      if (inserted) {
-        setNotes(prev => prev.map(n => n.id === currentId
-          ? { ...n, title: titleVal, body: encrypted_body, tags, updatedAt: Date.now(), dbId: inserted.id, id: inserted.id, isNew: false }
-          : n
+      if (!error && inserted) {
+        const dbId: string = inserted.id
+        // Mark as persisted immediately — before any state update — so a
+        // concurrent doSave call triggered by the upcoming setCurrentId cannot
+        // slip through and fire a second INSERT.
+        persistedRef.current[id] = dbId
+        // Also register under the new dbId so future saves use the correct key
+        persistedRef.current[dbId] = dbId
+
+        setNotes(prev => prev.map(n =>
+          n.id === id
+            ? { ...n, title: titleVal, body: encrypted_body, tags: currentTags, updatedAt: Date.now(), dbId, id: dbId }
+            : n
         ))
-        // FIX: update currentId AFTER clearing isNew flag to avoid re-triggering a second INSERT
-        setCurrentId(inserted.id)
+        setCurrentId(dbId)
+        // Update the id ref immediately so subsequent doSave calls within this
+        // tick use the real DB id
+        currentIdRef.current = dbId
       }
     } else {
+      // Subsequent saves — UPDATE
       await supabase.from('notes').update({
         title: titleVal,
         encrypted_body,
-        iv,
-        salt,
-        tags,
+        iv: note.iv,
+        salt: note.salt,
+        tags: currentTags,
         is_encrypted: note.encrypted,
-        updated_at: new Date().toISOString()
-      }).eq('id', note.dbId)
+        updated_at: new Date().toISOString(),
+      }).eq('id', existingDbId)
 
-      setNotes(prev => prev.map(n => n.id === currentId
-        ? { ...n, title: titleVal, body: encrypted_body, tags, updatedAt: Date.now() }
-        : n
+      setNotes(prev => prev.map(n =>
+        n.id === id
+          ? { ...n, title: titleVal, body: encrypted_body, tags: currentTags, updatedAt: Date.now() }
+          : n
       ))
     }
 
     isSavingRef.current = false
     setSaveStatus('saved')
     setTimeout(() => setSaveStatus('idle'), 2000)
-  }, [currentId, currentNote, title, body, tags])
+  // doSave intentionally has no deps — it reads everything from refs
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (!currentId || isLocked) return
@@ -296,7 +328,6 @@ export default function Dashboard() {
       id: uid(), title: '', body: '', tags: [],
       encrypted: false, iv: null, salt: null,
       createdAt: Date.now(), updatedAt: Date.now(),
-      isNew: true
     }
     setNotes(prev => [note, ...prev])
     setCurrentId(note.id)
@@ -312,9 +343,12 @@ export default function Dashboard() {
   const deleteNote = async () => {
     if (!currentId || !currentNote) return
     if (!confirm('Delete this note? This cannot be undone.')) return
-    if (currentNote.dbId && !currentNote.isNew) {
+    const dbId = persistedRef.current[currentId]
+    if (dbId) {
       const supabase = createClient()
-      await supabase.from('notes').delete().eq('id', currentNote.dbId)
+      await supabase.from('notes').delete().eq('id', dbId)
+      delete persistedRef.current[currentId]
+      delete persistedRef.current[dbId]
     }
     setNotes(prev => prev.filter(n => n.id !== currentId))
     setCurrentId(null)
