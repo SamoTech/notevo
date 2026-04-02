@@ -9,7 +9,7 @@
 > The open-source, zero-knowledge successor to Laverna.  
 > Built for 2026 with Next.js 15, TypeScript & AES-256-GCM encryption.
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-notevo.vercel.app-4f98a3?style=flat-square&logo=vercel)](https://notevo.vercel.app)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-notevo--io.vercel.app-4f98a3?style=flat-square&logo=vercel)](https://notevo-io.vercel.app)
 [![Deploy with Vercel](https://img.shields.io/badge/Deploy%20to-Vercel-000?style=flat-square&logo=vercel)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSamoTech%2Fnotevo)
 [![MIT License](https://img.shields.io/badge/License-MIT-22c55e?style=flat-square)](LICENSE)
 [![Open Issues](https://img.shields.io/github/issues/SamoTech/notevo?style=flat-square)](https://github.com/SamoTech/notevo/issues)
@@ -177,7 +177,7 @@ See [LICENSE](LICENSE) for the full text.
 
 <div align="center">
 
-Built with ❤️ by [Ossama Hashim](https://github.com/SamoTech) · [notevo.vercel.app](https://notevo.vercel.app)
+Built with ❤️ by [Ossama Hashim](https://github.com/SamoTech) · [notevo-io.vercel.app](https://notevo-io.vercel.app)
 
 *Free forever. Private by design.*
 
