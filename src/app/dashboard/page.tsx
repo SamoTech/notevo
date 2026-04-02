@@ -109,9 +109,10 @@ export default function Dashboard() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [loading, setLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
-  // FIX 2: track whether DB was truly empty so deleted notes don't re-appear
   const dbWasEmpty = useRef(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // FIX: guard against concurrent saves causing duplicate INSERTs
+  const isSavingRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const router = useRouter()
 
@@ -135,7 +136,6 @@ export default function Dashboard() {
     localStorage.setItem('notevo-theme', next)
   }
 
-  // FIX 3: sign-out handler
   const handleSignOut = async () => {
     const supabase = createClient()
     await supabase.auth.signOut()
@@ -164,7 +164,6 @@ export default function Dashboard() {
             }))
             setNotes(mapped)
           } else {
-            // FIX 2: remember DB was empty so we only show samples once
             dbWasEmpty.current = true
             setNotes(sampleNotes())
           }
@@ -180,7 +179,6 @@ export default function Dashboard() {
         body: '# Welcome to Notevo\n\nA **private**, encrypted note-taking app.\n\n## Features\n\n- ✅ Markdown editing with live preview\n- 🔐 AES-256 note encryption\n- 🏷️ Tags for organisation\n- 💾 Auto-save\n\nStart editing or press **+** to create a new one.',
         tags: ['welcome', 'demo'], encrypted: false, iv: null, salt: null,
         createdAt: Date.now() - 86400000, updatedAt: Date.now() - 3600000,
-        // FIX 2: sample notes are also marked isNew so they INSERT if edited
         isNew: true
       },
       {
@@ -224,18 +222,23 @@ export default function Dashboard() {
   // ── AUTOSAVE ──
   const doSave = useCallback(async () => {
     if (!currentId || !currentNote) return
+    // FIX: skip if a save is already in-flight to prevent duplicate INSERTs
+    if (isSavingRef.current) return
+    isSavingRef.current = true
+
     const note = currentNote
     setSaveStatus('saving')
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) { isSavingRef.current = false; return }
 
-    const encrypted_body = body
-    const iv = note.iv
-    const salt = note.salt
     const titleVal = title.trim() || 'Untitled'
 
-    // FIX 1: INSERT when note has no dbId yet (newly created note)
+    // FIX: for encrypted notes, persist the cipher (note.body) not the plaintext editor state
+    const encrypted_body = note.encrypted ? note.body : body
+    const iv = note.iv
+    const salt = note.salt
+
     if (!note.dbId || note.isNew) {
       const { data: inserted } = await supabase.from('notes').insert({
         user_id: user.id,
@@ -250,15 +253,14 @@ export default function Dashboard() {
       }).select('id').single()
 
       if (inserted) {
-        // store the new DB id and clear isNew flag
         setNotes(prev => prev.map(n => n.id === currentId
           ? { ...n, title: titleVal, body: encrypted_body, tags, updatedAt: Date.now(), dbId: inserted.id, id: inserted.id, isNew: false }
           : n
         ))
+        // FIX: update currentId AFTER clearing isNew flag to avoid re-triggering a second INSERT
         setCurrentId(inserted.id)
       }
     } else {
-      // UPDATE existing
       await supabase.from('notes').update({
         title: titleVal,
         encrypted_body,
@@ -275,6 +277,7 @@ export default function Dashboard() {
       ))
     }
 
+    isSavingRef.current = false
     setSaveStatus('saved')
     setTimeout(() => setSaveStatus('idle'), 2000)
   }, [currentId, currentNote, title, body, tags])
@@ -293,7 +296,7 @@ export default function Dashboard() {
       id: uid(), title: '', body: '', tags: [],
       encrypted: false, iv: null, salt: null,
       createdAt: Date.now(), updatedAt: Date.now(),
-      isNew: true   // FIX 1: flag so doSave will INSERT
+      isNew: true
     }
     setNotes(prev => [note, ...prev])
     setCurrentId(note.id)
@@ -309,7 +312,6 @@ export default function Dashboard() {
   const deleteNote = async () => {
     if (!currentId || !currentNote) return
     if (!confirm('Delete this note? This cannot be undone.')) return
-    // FIX 2: only delete from DB if it was actually saved there
     if (currentNote.dbId && !currentNote.isNew) {
       const supabase = createClient()
       await supabase.from('notes').delete().eq('id', currentNote.dbId)
@@ -574,7 +576,6 @@ export default function Dashboard() {
 
           <div style={{ flex: 1 }} />
 
-          {/* FIX 3: save status indicator */}
           {currentId && !isLocked && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: saveStatus === 'saved' ? 'var(--primary)' : 'var(--faint)', transition: 'color .2s', marginRight: 4 }}>
               {saveStatus === 'saved'
@@ -593,7 +594,6 @@ export default function Dashboard() {
             }
           </button>
 
-          {/* FIX 3: sign-out button */}
           <button className="icon-btn" onClick={handleSignOut} title="Sign out" style={{ marginLeft: 2 }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
