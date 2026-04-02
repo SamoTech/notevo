@@ -6,6 +6,35 @@ import { createClient } from '@/lib/supabase'
 import { encryptNote } from '@/lib/crypto'
 import Link from 'next/link'
 
+// Safe markdown renderer — HTML-escapes input FIRST, then applies transforms
+function renderMarkdownSafe(text: string): string {
+  if (!text) return ''
+  // 1. Escape all HTML entities before any substitution
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+  // 2. Apply Markdown transforms on the now-safe escaped text
+  return escaped
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+    .replace(/^---$/gm, '<hr>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // Links: href comes from escaped text so javascript: is already neutralised
+    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+    .replace(/^[*-] (.+)$/gm, '<li>$1</li>')
+    .replace(/((?:<li>[\s\S]*?<\/li>\n?)+)/g, '<ul>$1</ul>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/^(?!<[hbulopqh]|<\/)(.+)$/gm, '<p>$1</p>')
+    .replace(/\n/g, '<br>')
+}
+
 export default function NewNote() {
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
@@ -121,9 +150,12 @@ export default function NewNote() {
         </div>
 
         {preview ? (
-          <div className="prose min-h-64 py-2" dangerouslySetInnerHTML={{
-            __html: body.replace(/^### (.+)$/gm, '<h3>$1</h3>').replace(/^## (.+)$/gm, '<h2>$1</h2>').replace(/^# (.+)$/gm, '<h1>$1</h1>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>').replace(/`(.+?)`/g, '<code>$1</code>').replace(/\n/g, '<br>')
-          }} />
+          // SECURITY FIX: HTML-escape input BEFORE applying Markdown transforms
+          // to prevent DOM XSS via crafted note content (CodeQL alert #2)
+          <div
+            className="prose min-h-64 py-2"
+            dangerouslySetInnerHTML={{ __html: renderMarkdownSafe(body) }}
+          />
         ) : (
           <textarea value={body} onChange={e => setBody(e.target.value)}
             placeholder="Start writing in Markdown...\n\n# Heading\n**bold** *italic* `code`"

@@ -7,7 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<!-- marked for Markdown parsing -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- DOMPurify to sanitize marked output and prevent XSS (CodeQL alert #1) -->
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <style>
 /* ── TOKENS ─────────────────────────────────────────────── */
 :root,[data-theme="light"]{
@@ -218,7 +221,7 @@ img{display:block;max-width:100%}
     </div>
     <div id="sidebar-tabs">
       <button class="stab active" data-filter="all">All</button>
-      <button class="stab" data-filter="encrypted">🔐 Encrypted</button>
+      <button class="stab" data-filter="encrypted">&#128272; Encrypted</button>
       <button class="stab" data-filter="plain">Plain</button>
     </div>
     <div id="note-list">
@@ -238,7 +241,7 @@ img{display:block;max-width:100%}
     <div id="editor-inner" style="display:none;flex:1;flex-direction:column;overflow:hidden;min-height:0">
       <div id="editor-bar">
         <input id="note-title-input" type="text" placeholder="Note title…" autocomplete="off">
-        <span id="encrypt-badge" style="display:none;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--primary-hi);color:var(--primary)">🔐 Encrypted</span>
+        <span id="encrypt-badge" style="display:none;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--primary-hi);color:var(--primary)">&#128272; Encrypted</span>
       </div>
       <div id="format-bar">
         <button class="fmt-btn" onclick="fmt('bold')"><b>B</b></button>
@@ -249,7 +252,7 @@ img{display:block;max-width:100%}
         <button class="fmt-btn" onclick="fmt('h2')">H2</button>
         <button class="fmt-btn" onclick="fmt('h3')">H3</button>
         <div class="fmt-sep"></div>
-        <button class="fmt-btn" onclick="fmt('ul')">• List</button>
+        <button class="fmt-btn" onclick="fmt('ul')">&#8226; List</button>
         <button class="fmt-btn" onclick="fmt('ol')">1. List</button>
         <button class="fmt-btn" onclick="fmt('quote')">&ldquo; Quote</button>
         <button class="fmt-btn" onclick="fmt('link')">&#128279; Link</button>
@@ -281,7 +284,7 @@ img{display:block;max-width:100%}
       </div>
       <div id="status-bar">
         <span id="word-count">0 words</span>
-        <span>·</span>
+        <span>&middot;</span>
         <span id="char-count">0 chars</span>
         <div class="spacer"></div>
         <span id="save-indicator"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Saved</span>
@@ -313,6 +316,23 @@ img{display:block;max-width:100%}
   </div>
 </div>
 <script>
+// Configure marked to NOT pass raw HTML through — prevents attribute injection
+marked.setOptions({ headerIds: false, mangle: false });
+
+// SECURITY: Always sanitize marked output with DOMPurify before setting innerHTML
+// This fixes CodeQL alert #1 (Incomplete HTML attribute sanitization)
+function safeRenderPreview(md) {
+  const raw = marked.parse(md || '');
+  document.getElementById('preview-pane').innerHTML = DOMPurify.sanitize(raw, {
+    ALLOWED_TAGS: ['h1','h2','h3','h4','h5','h6','p','br','hr','strong','em','b','i',
+                   'code','pre','ul','ol','li','blockquote','a','table','thead','tbody',
+                   'tr','th','td','img','del','s'],
+    ALLOWED_ATTR: ['href','src','alt','title','target','rel'],
+    ALLOW_DATA_ATTR: false,
+    FORCE_BODY: true,
+  });
+}
+
 let notes=[],currentId=null,saveTimer=null,filterMode='all',searchQ='',unlocked={};
 (function(){
   notes=sampleNotes();
@@ -376,7 +396,7 @@ function selectNote(id){
     hideUnlockOverlay();
     const body=unlocked[id]??note.body;
     document.getElementById('md-editor').value=body;
-    renderPreview(body);
+    safeRenderPreview(body);
   }
   renderTags();
   updateWordCount();
@@ -408,7 +428,7 @@ async function unlockNote(){
     unlocked[currentId]=plain;
     hideUnlockOverlay();
     document.getElementById('md-editor').value=plain;
-    renderPreview(plain);
+    safeRenderPreview(plain);
     updateWordCount();
   }catch(e){
     document.getElementById('unlock-err').textContent='Incorrect password';
@@ -417,10 +437,9 @@ async function unlockNote(){
 }
 document.getElementById('unlock-pass').addEventListener('keydown',e=>{if(e.key==='Enter')unlockNote();});
 document.getElementById('md-editor').addEventListener('input',function(){
-  renderPreview(this.value);updateWordCount();schedSave();
+  safeRenderPreview(this.value);updateWordCount();schedSave();
 });
 document.getElementById('note-title-input').addEventListener('input',schedSave);
-function renderPreview(md){document.getElementById('preview-pane').innerHTML=marked.parse(md||'');}
 function updateWordCount(){
   const txt=document.getElementById('md-editor').value;
   const words=txt.trim().split(/\s+/).filter(Boolean).length;
@@ -491,7 +510,7 @@ document.querySelectorAll('.vtab').forEach(btn=>{
     this.classList.add('active');
     const area=document.getElementById('editor-area');
     area.className='mode-'+this.dataset.mode;
-    if(this.dataset.mode!=='edit')renderPreview(document.getElementById('md-editor').value);
+    if(this.dataset.mode!=='edit')safeRenderPreview(document.getElementById('md-editor').value);
   };
 });
 function renderTags(){
@@ -501,7 +520,7 @@ function renderTags(){
   note.tags.forEach(t=>{
     const span=document.createElement('span');
     span.className='tag';
-    span.innerHTML=escHtml(t)+'<span class="tag-rm" onclick="removeTag(\''+escHtml(t)+'\')">×</span>';
+    span.innerHTML=escHtml(t)+'<span class="tag-rm" onclick="removeTag(\''+escHtml(t)+'\')">\u00d7</span>';
     tl.appendChild(span);
   });
 }
@@ -529,7 +548,7 @@ document.querySelectorAll('.stab').forEach(btn=>{
 document.getElementById('search-input').addEventListener('input',function(){searchQ=this.value;renderList();});
 document.getElementById('btn-export').onclick=function(){
   const note=notes.find(n=>n.id===currentId);if(!note)return;
-  const body=note.encrypted?(unlocked[currentId]??'[Encrypted — unlock first]'):note.body;
+  const body=note.encrypted?(unlocked[currentId]??'[Encrypted \u2014 unlock first]'):note.body;
   const blob=new Blob([`# ${note.title}\n\n${body}`],{type:'text/markdown'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(note.title||'note').replace(/[^a-z0-9]/gi,'_')+'.md';a.click();
 };
@@ -566,7 +585,7 @@ async function doEncryptAction(){
       closeEncryptPanel();
       document.getElementById('encrypt-badge').style.display='none';
       document.getElementById('md-editor').value=plain;
-      renderPreview(plain);
+      safeRenderPreview(plain);
       hideUnlockOverlay();
       renderList();
     }catch(e){document.getElementById('ep-dec-err').textContent='Incorrect password';}
