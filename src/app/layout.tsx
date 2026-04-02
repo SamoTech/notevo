@@ -1,35 +1,51 @@
 import type { Metadata } from 'next'
-import { Inter, Instrument_Serif } from 'next/font/google'
+import { Inter } from 'next/font/google'
 import './globals.css'
+import './legal.css'
+import CookieBanner from '@/components/CookieBanner'
+import SiteFooter from '@/components/SiteFooter'
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
-const instrumentSerif = Instrument_Serif({ subsets: ['latin'], weight: '400', style: ['normal', 'italic'], variable: '--font-serif', display: 'swap' })
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Notevo — Private Encrypted Notes',
-  description: 'Private, encrypted Markdown notes. Your data never leaves your hands.',
-  icons: {
-    icon: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔐</text></svg>'
-  }
+  description: 'Free, private, encrypted note-taking app. Your notes never leave your device. No account needed. Markdown support. Free forever.',
+  keywords: ['notes', 'encrypted notes', 'private notes', 'markdown notes', 'free notes app', 'Laverna alternative'],
+  authors: [{ name: 'Ossama Hashim', url: 'https://github.com/SamoTech' }],
+  openGraph: {
+    title: 'Notevo — Private Encrypted Notes',
+    description: 'Free, private, encrypted note-taking. Your notes never leave your device.',
+    url: 'https://notevo.vercel.app',
+    siteName: 'Notevo',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Notevo — Private Encrypted Notes',
+    description: 'Free, private, encrypted note-taking. Your notes never leave your device.',
+    creator: '@OssamaHashim',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: `
-          (function(){
-            try {
-              var t = localStorage.getItem('notevo-theme');
-              if (t) document.documentElement.setAttribute('data-theme', t);
-              else if (window.matchMedia('(prefers-color-scheme: dark)').matches)
-                document.documentElement.setAttribute('data-theme', 'dark');
-            } catch(e) {}
-          })()
-        `}} />
-      </head>
-      <body className={`${inter.variable} ${instrumentSerif.variable}`} style={{ fontFamily: 'var(--font-inter, sans-serif)' }}>
-        {children}
+      <body className={inter.className}>
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+          <div style={{ flex: 1 }}>
+            {children}
+          </div>
+          <SiteFooter />
+        </div>
+        <CookieBanner />
       </body>
     </html>
   )
