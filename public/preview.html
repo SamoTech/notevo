@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notevo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+/* ── TOKENS ─────────────────────────────────────────────── */
+:root,[data-theme="light"]{
+  --bg:#f7f6f2;--surface:#ffffff;--surface-2:#f3f2ef;
+  --border:rgba(0,0,0,.09);--divider:rgba(0,0,0,.07);
+  --text:#1a1917;--muted:#6b6a67;--faint:#b0afa9;
+  --primary:#01696f;--primary-h:#0c4e54;--primary-hi:#cedcd8;
+  --danger:#a12c7b;--warn-bg:#fff8ed;--warn-border:#f5c97a;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.07);
+  --shadow-md:0 4px 16px rgba(0,0,0,.09);
+  --shadow-lg:0 12px 40px rgba(0,0,0,.13);
+  --r:8px;--r-lg:12px;--r-xl:16px;
+  --font-body:'Inter',sans-serif;
+  --font-display:'Instrument Serif',Georgia,serif;
+  --sidebar-w:260px;
+  --topbar-h:52px;
+}
+[data-theme="dark"]{
+  --bg:#141312;--surface:#1c1b19;--surface-2:#232220;
+  --border:rgba(255,255,255,.08);--divider:rgba(255,255,255,.06);
+  --text:#d8d7d3;--muted:#7a7976;--faint:#4a4946;
+  --primary:#4f98a3;--primary-h:#3a7f8a;--primary-hi:#1f3436;
+  --danger:#d163a7;--warn-bg:#2a2318;--warn-border:#7a5820;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.3);
+  --shadow-md:0 4px 16px rgba(0,0,0,.4);
+  --shadow-lg:0 12px 40px rgba(0,0,0,.5);
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme]){
+  --bg:#141312;--surface:#1c1b19;--surface-2:#232220;
+  --border:rgba(255,255,255,.08);--divider:rgba(255,255,255,.06);
+  --text:#d8d7d3;--muted:#7a7976;--faint:#4a4946;
+  --primary:#4f98a3;--primary-h:#3a7f8a;--primary-hi:#1f3436;
+  --danger:#d163a7;--warn-bg:#2a2318;--warn-border:#7a5820;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.3);
+  --shadow-md:0 4px 16px rgba(0,0,0,.4);
+  --shadow-lg:0 12px 40px rgba(0,0,0,.5);
+}}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px;-webkit-font-smoothing:antialiased;height:100%}
+body{font-family:var(--font-body);background:var(--bg);color:var(--text);height:100vh;overflow:hidden;display:flex;flex-direction:column}
+button{cursor:pointer;background:none;border:none;font:inherit;color:inherit}
+input,textarea{font:inherit;color:inherit;background:none;border:none;outline:none}
+img{display:block;max-width:100%}
+#topbar{height:var(--topbar-h);min-height:var(--topbar-h);display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--border);background:var(--surface);z-index:100;flex-shrink:0}
+.topbar-logo{display:flex;align-items:center;gap:8px;font-family:var(--font-display);font-size:20px;font-weight:400;color:var(--text);text-decoration:none;letter-spacing:-.3px}
+.topbar-logo svg{color:var(--primary)}
+.topbar-sep{width:1px;height:24px;background:var(--border);margin:0 4px}
+#topbar .spacer{flex:1}
+.icon-btn{width:34px;height:34px;border-radius:var(--r);display:flex;align-items:center;justify-content:center;color:var(--muted);transition:background .15s,color .15s;flex-shrink:0}
+.icon-btn:hover{background:var(--surface-2);color:var(--text)}
+.icon-btn.active{color:var(--primary);background:var(--primary-hi)}
+#app{display:flex;flex:1;overflow:hidden}
+#sidebar{width:var(--sidebar-w);min-width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;transition:width .2s,min-width .2s}
+#sidebar.collapsed{width:0;min-width:0;border:none}
+#sidebar-top{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+#search-wrap{flex:1;display:flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r);padding:0 10px;height:32px}
+#search-wrap svg{color:var(--faint);flex-shrink:0}
+#search-input{flex:1;font-size:13px;background:none;color:var(--text)}
+#search-input::placeholder{color:var(--faint)}
+#new-note-btn{width:32px;height:32px;border-radius:var(--r);flex-shrink:0;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;transition:background .15s}
+#new-note-btn:hover{background:var(--primary-h)}
+#new-note-btn svg{pointer-events:none}
+#sidebar-tabs{display:flex;padding:8px 12px 4px;gap:4px;flex-shrink:0}
+.stab{font-size:12px;font-weight:500;padding:4px 10px;border-radius:99px;color:var(--muted);transition:background .15s,color .15s}
+.stab:hover{background:var(--surface-2);color:var(--text)}
+.stab.active{background:var(--primary-hi);color:var(--primary)}
+#note-list{flex:1;overflow-y:auto;padding:4px 8px 8px}
+#note-list::-webkit-scrollbar{width:4px}
+#note-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+.note-item{padding:10px;border-radius:var(--r-lg);cursor:pointer;transition:background .12s;position:relative;margin-bottom:2px}
+.note-item:hover{background:var(--surface-2)}
+.note-item.active{background:var(--primary-hi)}
+.note-item-title{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.note-item.active .note-item-title{color:var(--primary)}
+.note-item-meta{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.note-lock-icon{display:inline-flex;align-items:center;color:var(--primary);opacity:.7}
+.note-item-excerpt{font-size:12px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:48px 16px;color:var(--faint);text-align:center}
+.empty-state svg{opacity:.4}
+.empty-state p{font-size:13px;line-height:1.5}
+#editor-area{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+#editor-bar{height:44px;min-height:44px;display:flex;align-items:center;gap:4px;padding:0 16px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+#note-title-input{flex:1;font-size:15px;font-weight:600;color:var(--text);background:none;border:none;outline:none;min-width:0}
+#note-title-input::placeholder{color:var(--faint)}
+#format-bar{display:flex;align-items:center;gap:2px;padding:6px 12px;border-bottom:1px solid var(--divider);background:var(--surface);flex-shrink:0;flex-wrap:wrap}
+.fmt-btn{height:28px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:4px;transition:background .12s,color .12s;white-space:nowrap}
+.fmt-btn:hover{background:var(--surface-2);color:var(--text)}
+.fmt-sep{width:1px;height:18px;background:var(--border);margin:0 2px;flex-shrink:0}
+#view-toggle{display:flex;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-left:auto;flex-shrink:0}
+.vtab{height:26px;padding:0 10px;font-size:11px;font-weight:600;color:var(--muted);transition:background .12s,color .12s;white-space:nowrap}
+.vtab.active{background:var(--primary-hi);color:var(--primary)}
+#editor-body{flex:1;display:flex;overflow:hidden;min-height:0}
+#md-editor{flex:1;resize:none;padding:24px 28px;font-family:'Inter',monospace;font-size:14px;line-height:1.7;color:var(--text);background:var(--bg);border:none;outline:none;overflow-y:auto;min-width:0}
+#md-editor::-webkit-scrollbar{width:4px}
+#md-editor::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+#preview-pane{flex:1;padding:24px 28px;overflow-y:auto;background:var(--surface);border-left:1px solid var(--border);min-width:0}
+#preview-pane h1{font-family:var(--font-display);font-size:26px;font-weight:400;margin:0 0 16px;color:var(--text);line-height:1.2}
+#preview-pane h2{font-size:18px;font-weight:700;margin:24px 0 10px;color:var(--text)}
+#preview-pane h3{font-size:15px;font-weight:700;margin:18px 0 8px;color:var(--text)}
+#preview-pane p{margin:0 0 14px;line-height:1.7;font-size:14px;color:var(--text)}
+#preview-pane ul,#preview-pane ol{margin:0 0 14px;padding-left:20px}
+#preview-pane li{margin-bottom:4px;font-size:14px;line-height:1.6}
+#preview-pane code{font-family:monospace;font-size:13px;background:var(--surface-2);padding:2px 5px;border-radius:4px;color:var(--primary)}
+#preview-pane pre{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;overflow-x:auto;margin:0 0 14px}
+#preview-pane pre code{background:none;padding:0;color:var(--text)}
+#preview-pane blockquote{border-left:3px solid var(--primary);padding:2px 0 2px 14px;margin:0 0 14px;color:var(--muted)}
+#preview-pane a{color:var(--primary);text-decoration:underline}
+#preview-pane hr{border:none;border-top:1px solid var(--border);margin:20px 0}
+#preview-pane table{width:100%;border-collapse:collapse;margin:0 0 14px;font-size:13px}
+#preview-pane th{background:var(--surface-2);font-weight:600;padding:8px 12px;border:1px solid var(--border);text-align:left}
+#preview-pane td{padding:7px 12px;border:1px solid var(--border)}
+#editor-area.mode-edit #preview-pane{display:none}
+#editor-area.mode-preview #md-editor{display:none}
+#status-bar{height:28px;display:flex;align-items:center;gap:12px;padding:0 16px;border-top:1px solid var(--border);background:var(--surface);font-size:11px;color:var(--muted);flex-shrink:0}
+#status-bar .spacer{flex:1}
+#save-indicator{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--faint);transition:color .2s}
+#save-indicator.saved{color:var(--primary)}
+#no-note{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--faint)}
+#no-note svg{opacity:.25}
+#no-note h3{font-family:var(--font-display);font-size:22px;font-weight:400;color:var(--muted)}
+#no-note p{font-size:13px;color:var(--faint)}
+#no-note-cta{margin-top:8px;padding:9px 20px;border-radius:var(--r);background:var(--primary);color:#fff;font-size:13px;font-weight:600;transition:background .15s}
+#no-note-cta:hover{background:var(--primary-h)}
+#tags-bar{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:7px 16px;border-top:1px solid var(--divider);background:var(--surface);flex-shrink:0;min-height:38px}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:500;background:var(--primary-hi);color:var(--primary)}
+.tag-rm{opacity:.6;font-size:14px;line-height:1;cursor:pointer;padding:0 1px}
+.tag-rm:hover{opacity:1}
+#tag-input{font-size:12px;color:var(--text);width:80px;flex-shrink:0}
+#tag-input::placeholder{color:var(--faint);font-size:12px}
+#encrypt-panel{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:500;padding:16px;opacity:0;pointer-events:none;transition:opacity .2s}
+#encrypt-panel.open{opacity:1;pointer-events:auto}
+#encrypt-box{background:var(--surface);border-radius:var(--r-xl);box-shadow:var(--shadow-lg);padding:28px;width:100%;max-width:380px}
+#encrypt-box h2{font-family:var(--font-display);font-size:20px;font-weight:400;color:var(--text);margin-bottom:4px}
+#encrypt-box .subtitle{font-size:13px;color:var(--muted);margin-bottom:20px}
+.warn-box{background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:var(--r);padding:10px 12px;margin-bottom:18px;font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:flex-start;line-height:1.5}
+.warn-box svg{color:#e5a020;flex-shrink:0;margin-top:1px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;letter-spacing:.03em;text-transform:uppercase}
+.field input{width:100%;height:38px;border:1px solid var(--border);border-radius:var(--r);padding:0 12px;font-size:14px;background:var(--surface-2);color:var(--text);transition:border-color .15s,box-shadow .15s}
+.field input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(1,105,111,.12);outline:none}
+.btn-row{display:flex;gap:8px;margin-top:20px}
+.btn-cancel{flex:1;height:36px;border-radius:var(--r);border:1px solid var(--border);font-size:13px;font-weight:600;color:var(--muted);transition:background .15s,color .15s}
+.btn-cancel:hover{background:var(--surface-2);color:var(--text)}
+.btn-primary{flex:2;height:36px;border-radius:var(--r);background:var(--primary);color:#fff;font-size:13px;font-weight:600;transition:background .15s}
+.btn-primary:hover{background:var(--primary-h)}
+.btn-danger{flex:2;height:36px;border-radius:var(--r);background:var(--danger);color:#fff;font-size:13px;font-weight:600;transition:opacity .15s}
+.btn-danger:hover{opacity:.85}
+#unlock-overlay{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:32px}
+#unlock-box{width:100%;max-width:340px;text-align:center}
+#unlock-box .lock-icon{width:52px;height:52px;border-radius:99px;background:var(--primary-hi);color:var(--primary);display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
+#unlock-box h3{font-family:var(--font-display);font-size:20px;font-weight:400;margin-bottom:6px;color:var(--text)}
+#unlock-box p{font-size:13px;color:var(--muted);margin-bottom:20px}
+#unlock-pass{width:100%;height:40px;border:1px solid var(--border);border-radius:var(--r);padding:0 14px;font-size:14px;background:var(--surface-2);color:var(--text);margin-bottom:12px;transition:border-color .15s,box-shadow .15s}
+#unlock-pass:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(1,105,111,.12);outline:none}
+.err-msg{font-size:12px;color:var(--danger);margin-top:-6px;margin-bottom:10px;min-height:16px;display:block}
+*::-webkit-scrollbar{width:6px;height:6px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+@media(max-width:700px){
+  :root{--sidebar-w:100%}
+  #sidebar{position:fixed;inset:var(--topbar-h) 0 0 0;z-index:200;transition:transform .2s;transform:translateX(-100%)}
+  #sidebar.mobile-open{transform:translateX(0)}
+  #toggle-sidebar{display:flex !important}
+  #format-bar{gap:1px;padding:4px 8px}
+  .fmt-btn{padding:0 5px;font-size:11px}
+}
+</style>
+</head>
+<body>
+<header id="topbar">
+  <button class="icon-btn" id="toggle-sidebar" title="Toggle sidebar" style="display:none">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <a class="topbar-logo" href="#">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-label="Notevo">
+      <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="1.8"/>
+      <path d="M7 8h10M7 12h7M7 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      <circle cx="19" cy="19" r="5" fill="var(--primary)"/>
+      <path d="M17 19l1.5 1.5L21 17" stroke="white" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Notevo
+  </a>
+  <div class="topbar-sep"></div>
+  <button class="icon-btn" id="btn-encrypt" title="Encrypt / decrypt note" style="display:none">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+  </button>
+  <button class="icon-btn" id="btn-export" title="Export note as Markdown" style="display:none">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+  </button>
+  <button class="icon-btn" id="btn-delete" title="Delete note" style="display:none">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+  </button>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="theme-toggle" title="Toggle dark mode" data-theme-toggle>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</header>
+<div id="app">
+  <aside id="sidebar">
+    <div id="sidebar-top">
+      <div id="search-wrap">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="search-input" type="search" placeholder="Search notes…" autocomplete="off">
+      </div>
+      <button id="new-note-btn" title="New note (N)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+    </div>
+    <div id="sidebar-tabs">
+      <button class="stab active" data-filter="all">All</button>
+      <button class="stab" data-filter="encrypted">🔐 Encrypted</button>
+      <button class="stab" data-filter="plain">Plain</button>
+    </div>
+    <div id="note-list">
+      <div class="empty-state" id="list-empty" style="display:none">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <p>No notes yet.<br>Press <strong>+</strong> to create one.</p>
+      </div>
+    </div>
+  </aside>
+  <main id="editor-area" class="mode-edit">
+    <div id="no-note">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      <h3>No note selected</h3>
+      <p>Select a note from the sidebar or create a new one</p>
+      <button id="no-note-cta" onclick="createNote()">+ New note</button>
+    </div>
+    <div id="editor-inner" style="display:none;flex:1;flex-direction:column;overflow:hidden;min-height:0">
+      <div id="editor-bar">
+        <input id="note-title-input" type="text" placeholder="Note title…" autocomplete="off">
+        <span id="encrypt-badge" style="display:none;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--primary-hi);color:var(--primary)">🔐 Encrypted</span>
+      </div>
+      <div id="format-bar">
+        <button class="fmt-btn" onclick="fmt('bold')"><b>B</b></button>
+        <button class="fmt-btn" onclick="fmt('italic')"><i>I</i></button>
+        <button class="fmt-btn" onclick="fmt('code')" style="font-family:monospace">`C`</button>
+        <div class="fmt-sep"></div>
+        <button class="fmt-btn" onclick="fmt('h1')">H1</button>
+        <button class="fmt-btn" onclick="fmt('h2')">H2</button>
+        <button class="fmt-btn" onclick="fmt('h3')">H3</button>
+        <div class="fmt-sep"></div>
+        <button class="fmt-btn" onclick="fmt('ul')">• List</button>
+        <button class="fmt-btn" onclick="fmt('ol')">1. List</button>
+        <button class="fmt-btn" onclick="fmt('quote')">&ldquo; Quote</button>
+        <button class="fmt-btn" onclick="fmt('link')">&#128279; Link</button>
+        <div class="fmt-sep"></div>
+        <div id="view-toggle">
+          <button class="vtab active" data-mode="edit">Edit</button>
+          <button class="vtab" data-mode="split">Split</button>
+          <button class="vtab" data-mode="preview">Preview</button>
+        </div>
+      </div>
+      <div id="unlock-overlay" style="display:none">
+        <div id="unlock-box">
+          <div class="lock-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+          <h3>Note is encrypted</h3>
+          <p>Enter your password to read and edit this note</p>
+          <input id="unlock-pass" type="password" placeholder="Enter password…" autocomplete="current-password">
+          <span class="err-msg" id="unlock-err"></span>
+          <button class="btn-primary" style="width:100%;height:40px;border-radius:var(--r);font-size:14px;font-weight:600" onclick="unlockNote()">Unlock note</button>
+        </div>
+      </div>
+      <div id="editor-body">
+        <textarea id="md-editor" placeholder="Start writing in Markdown…"></textarea>
+        <div id="preview-pane"></div>
+      </div>
+      <div id="tags-bar">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--faint);flex-shrink:0"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+        <div id="tags-list"></div>
+        <input id="tag-input" type="text" placeholder="Add tag…">
+      </div>
+      <div id="status-bar">
+        <span id="word-count">0 words</span>
+        <span>·</span>
+        <span id="char-count">0 chars</span>
+        <div class="spacer"></div>
+        <span id="save-indicator"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Saved</span>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="encrypt-panel">
+  <div id="encrypt-box">
+    <h2 id="ep-title">Encrypt note</h2>
+    <p class="subtitle" id="ep-sub">Protect this note with a password using AES-256 encryption</p>
+    <div class="warn-box">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>This password <strong>cannot be recovered</strong>. If lost, the note cannot be decrypted.</span>
+    </div>
+    <div id="ep-encrypt-fields">
+      <div class="field"><label>Password</label><input type="password" id="ep-pass" placeholder="Choose a strong password…" autocomplete="new-password"></div>
+      <div class="field"><label>Confirm password</label><input type="password" id="ep-confirm" placeholder="Confirm password…" autocomplete="new-password"></div>
+      <span class="err-msg" id="ep-err"></span>
+    </div>
+    <div id="ep-decrypt-fields" style="display:none">
+      <div class="field"><label>Password</label><input type="password" id="ep-dec-pass" placeholder="Enter your password…" autocomplete="current-password"></div>
+      <span class="err-msg" id="ep-dec-err"></span>
+    </div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeEncryptPanel()">Cancel</button>
+      <button class="btn-primary" id="ep-action-btn" onclick="doEncryptAction()">Encrypt note</button>
+    </div>
+  </div>
+</div>
+<script>
+let notes=[],currentId=null,saveTimer=null,filterMode='all',searchQ='',unlocked={};
+(function(){
+  notes=sampleNotes();
+  renderList();
+  if(notes.length)selectNote(notes[0].id);
+})();
+function sampleNotes(){
+  const id1=uid(),id2=uid();
+  return[
+    {id:id1,title:'Welcome to Notevo',body:'# Welcome to Notevo\n\nA **private**, encrypted note-taking app.\n\n## Features\n\n- Markdown editing with live preview\n- AES-256 note encryption\n- Tags for organisation\n- Auto-save\n\n## Shortcuts\n\n| Key | Action |\n|-----|--------|\n| `N` | New note |\n| `Ctrl+F` | Search |\n| `Esc` | Close panels |',tags:['welcome','demo'],encrypted:false,iv:null,salt:null,createdAt:Date.now()-86400000,updatedAt:Date.now()-3600000},
+    {id:id2,title:'Markdown cheatsheet',body:'# Markdown\n\n**Bold**, *Italic*, `code`\n\n## Lists\n\n- Item one\n- Item two\n\n1. First\n2. Second\n\n## Code\n\n```javascript\nconsole.log("hello");\n```\n\n> Blockquote here',tags:['reference'],encrypted:false,iv:null,salt:null,createdAt:Date.now()-3600000,updatedAt:Date.now()-600000}
+  ];
+}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function fmtDate(ts){
+  const d=new Date(ts),now=new Date();
+  if(d.toDateString()===now.toDateString())return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  return d.toLocaleDateString([],{month:'short',day:'numeric'});
+}
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function renderList(){
+  const list=document.getElementById('note-list');
+  const empty=document.getElementById('list-empty');
+  let filtered=notes.filter(n=>{
+    if(filterMode==='encrypted'&&!n.encrypted)return false;
+    if(filterMode==='plain'&&n.encrypted)return false;
+    if(searchQ){const q=searchQ.toLowerCase();if(!n.title.toLowerCase().includes(q)&&(n.encrypted||!n.body.toLowerCase().includes(q)))return false;}
+    return true;
+  });
+  [...list.querySelectorAll('.note-item')].forEach(el=>el.remove());
+  if(!filtered.length){empty.style.display='flex';return;}
+  empty.style.display='none';
+  filtered.sort((a,b)=>b.updatedAt-a.updatedAt);
+  filtered.forEach(n=>{
+    const el=document.createElement('div');
+    el.className='note-item'+(n.id===currentId?' active':'');
+    el.dataset.id=n.id;
+    el.onclick=()=>selectNote(n.id);
+    const excerpt=n.encrypted?'<span style="color:var(--faint);font-style:italic">Encrypted</span>':escHtml(n.body.replace(/#{1,6}\s?/g,'').replace(/\*\*/g,'').replace(/\*/g,'').slice(0,80));
+    el.innerHTML=`<div class="note-item-title">${escHtml(n.title)||'Untitled'}</div><div class="note-item-meta">${n.encrypted?'<span class="note-lock-icon"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>':''}<span>${fmtDate(n.updatedAt)}</span>${n.tags.length?'<span>·</span><span>'+n.tags.slice(0,2).map(t=>'#'+escHtml(t)).join(' ')+'</span>':''}</div><div class="note-item-excerpt">${excerpt}</div>`;
+    list.appendChild(el);
+  });
+}
+function selectNote(id){
+  currentId=id;
+  const note=notes.find(n=>n.id===id);
+  if(!note)return;
+  renderList();
+  if(window.innerWidth<=700)document.getElementById('sidebar').classList.remove('mobile-open');
+  document.getElementById('no-note').style.display='none';
+  const inner=document.getElementById('editor-inner');
+  inner.style.display='flex';
+  document.getElementById('note-title-input').value=note.title;
+  document.getElementById('encrypt-badge').style.display=note.encrypted?'inline-flex':'none';
+  ['btn-encrypt','btn-export','btn-delete'].forEach(id=>document.getElementById(id).style.display='flex');
+  if(note.encrypted&&!unlocked[id]){
+    showUnlockOverlay();
+    document.getElementById('md-editor').value='';
+    document.getElementById('preview-pane').innerHTML='';
+  }else{
+    hideUnlockOverlay();
+    const body=unlocked[id]??note.body;
+    document.getElementById('md-editor').value=body;
+    renderPreview(body);
+  }
+  renderTags();
+  updateWordCount();
+}
+function showUnlockOverlay(){
+  document.getElementById('unlock-overlay').style.display='flex';
+  document.getElementById('editor-body').style.display='none';
+  document.getElementById('tags-bar').style.display='none';
+  document.getElementById('format-bar').style.display='none';
+  document.getElementById('status-bar').style.display='none';
+  setTimeout(()=>document.getElementById('unlock-pass').focus(),50);
+}
+function hideUnlockOverlay(){
+  document.getElementById('unlock-overlay').style.display='none';
+  document.getElementById('editor-body').style.display='flex';
+  document.getElementById('tags-bar').style.display='flex';
+  document.getElementById('format-bar').style.display='flex';
+  document.getElementById('status-bar').style.display='flex';
+  document.getElementById('unlock-err').textContent='';
+  document.getElementById('unlock-pass').value='';
+}
+async function unlockNote(){
+  const note=notes.find(n=>n.id===currentId);
+  if(!note)return;
+  const pass=document.getElementById('unlock-pass').value;
+  if(!pass){document.getElementById('unlock-err').textContent='Enter your password';return;}
+  try{
+    const plain=await decryptText(note.body,pass,note.iv,note.salt);
+    unlocked[currentId]=plain;
+    hideUnlockOverlay();
+    document.getElementById('md-editor').value=plain;
+    renderPreview(plain);
+    updateWordCount();
+  }catch(e){
+    document.getElementById('unlock-err').textContent='Incorrect password';
+    document.getElementById('unlock-pass').select();
+  }
+}
+document.getElementById('unlock-pass').addEventListener('keydown',e=>{if(e.key==='Enter')unlockNote();});
+document.getElementById('md-editor').addEventListener('input',function(){
+  renderPreview(this.value);updateWordCount();schedSave();
+});
+document.getElementById('note-title-input').addEventListener('input',schedSave);
+function renderPreview(md){document.getElementById('preview-pane').innerHTML=marked.parse(md||'');}
+function updateWordCount(){
+  const txt=document.getElementById('md-editor').value;
+  const words=txt.trim().split(/\s+/).filter(Boolean).length;
+  document.getElementById('word-count').textContent=words+' word'+(words!==1?'s':'');
+  document.getElementById('char-count').textContent=txt.length+' char'+(txt.length!==1?'s':'');
+}
+function schedSave(){
+  clearTimeout(saveTimer);
+  document.getElementById('save-indicator').classList.remove('saved');
+  document.getElementById('save-indicator').innerHTML='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9"/></svg> Saving…';
+  saveTimer=setTimeout(saveCurrentNote,800);
+}
+function saveCurrentNote(){
+  const note=notes.find(n=>n.id===currentId);
+  if(!note)return;
+  note.title=document.getElementById('note-title-input').value||'Untitled';
+  note.updatedAt=Date.now();
+  if(note.encrypted&&unlocked[currentId]!==undefined)unlocked[currentId]=document.getElementById('md-editor').value;
+  else if(!note.encrypted)note.body=document.getElementById('md-editor').value;
+  renderList();
+  const si=document.getElementById('save-indicator');
+  si.classList.add('saved');
+  si.innerHTML='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Saved';
+}
+function createNote(){
+  const note={id:uid(),title:'',body:'',tags:[],encrypted:false,iv:null,salt:null,createdAt:Date.now(),updatedAt:Date.now()};
+  notes.unshift(note);
+  selectNote(note.id);
+  setTimeout(()=>document.getElementById('note-title-input').focus(),50);
+}
+document.getElementById('new-note-btn').onclick=createNote;
+document.getElementById('btn-delete').onclick=function(){
+  if(!currentId)return;
+  if(!confirm('Delete this note? This cannot be undone.'))return;
+  delete unlocked[currentId];
+  notes=notes.filter(n=>n.id!==currentId);
+  currentId=null;
+  document.getElementById('editor-inner').style.display='none';
+  document.getElementById('no-note').style.display='flex';
+  ['btn-encrypt','btn-export','btn-delete'].forEach(id=>document.getElementById(id).style.display='none');
+  renderList();
+};
+function fmt(type){
+  const ta=document.getElementById('md-editor');
+  const s=ta.selectionStart,e=ta.selectionEnd,val=ta.value;
+  const sel=val.slice(s,e);
+  let rep='',cs=0,ce=0;
+  switch(type){
+    case 'bold':rep=`**${sel||'bold text'}**`;cs=2;ce=rep.length-2;break;
+    case 'italic':rep=`*${sel||'italic text'}*`;cs=1;ce=rep.length-1;break;
+    case 'code':rep='`'+(sel||'code')+'`';cs=1;ce=rep.length-1;break;
+    case 'h1':rep=`# ${sel||'Heading 1'}`;cs=2;ce=rep.length;break;
+    case 'h2':rep=`## ${sel||'Heading 2'}`;cs=3;ce=rep.length;break;
+    case 'h3':rep=`### ${sel||'Heading 3'}`;cs=4;ce=rep.length;break;
+    case 'ul':rep=`- ${sel||'List item'}`;cs=2;ce=rep.length;break;
+    case 'ol':rep=`1. ${sel||'List item'}`;cs=3;ce=rep.length;break;
+    case 'quote':rep=`> ${sel||'Quote'}`;cs=2;ce=rep.length;break;
+    case 'link':const url=prompt('URL:','https://');if(!url)return;rep=`[${sel||'Link text'}](${url})`;cs=1;ce=(sel||'Link text').length+1;break;
+  }
+  ta.setRangeText(rep,s,e,'end');
+  ta.selectionStart=s+cs;ta.selectionEnd=s+ce;
+  ta.dispatchEvent(new Event('input'));
+  ta.focus();
+}
+document.querySelectorAll('.vtab').forEach(btn=>{
+  btn.onclick=function(){
+    document.querySelectorAll('.vtab').forEach(b=>b.classList.remove('active'));
+    this.classList.add('active');
+    const area=document.getElementById('editor-area');
+    area.className='mode-'+this.dataset.mode;
+    if(this.dataset.mode!=='edit')renderPreview(document.getElementById('md-editor').value);
+  };
+});
+function renderTags(){
+  const note=notes.find(n=>n.id===currentId);if(!note)return;
+  const tl=document.getElementById('tags-list');
+  tl.innerHTML='';
+  note.tags.forEach(t=>{
+    const span=document.createElement('span');
+    span.className='tag';
+    span.innerHTML=escHtml(t)+'<span class="tag-rm" onclick="removeTag(\''+escHtml(t)+'\')">×</span>';
+    tl.appendChild(span);
+  });
+}
+function removeTag(t){
+  const note=notes.find(n=>n.id===currentId);if(!note)return;
+  note.tags=note.tags.filter(x=>x!==t);
+  renderTags();renderList();
+}
+const tagInput=document.getElementById('tag-input');
+tagInput.addEventListener('keydown',e=>{
+  if(e.key==='Enter'||e.key===','){
+    e.preventDefault();
+    const v=tagInput.value.trim().replace(/,/g,'');
+    if(v){const note=notes.find(n=>n.id===currentId);if(!note)return;if(!note.tags.includes(v))note.tags.push(v);tagInput.value='';renderTags();renderList();}
+  }
+});
+document.querySelectorAll('.stab').forEach(btn=>{
+  btn.onclick=function(){
+    document.querySelectorAll('.stab').forEach(b=>b.classList.remove('active'));
+    this.classList.add('active');
+    filterMode=this.dataset.filter;
+    renderList();
+  };
+});
+document.getElementById('search-input').addEventListener('input',function(){searchQ=this.value;renderList();});
+document.getElementById('btn-export').onclick=function(){
+  const note=notes.find(n=>n.id===currentId);if(!note)return;
+  const body=note.encrypted?(unlocked[currentId]??'[Encrypted — unlock first]'):note.body;
+  const blob=new Blob([`# ${note.title}\n\n${body}`],{type:'text/markdown'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(note.title||'note').replace(/[^a-z0-9]/gi,'_')+'.md';a.click();
+};
+document.getElementById('btn-encrypt').onclick=openEncryptPanel;
+function openEncryptPanel(){
+  const note=notes.find(n=>n.id===currentId);if(!note)return;
+  const panel=document.getElementById('encrypt-panel');
+  const isEnc=note.encrypted;
+  document.getElementById('ep-title').textContent=isEnc?'Decrypt note':'Encrypt note';
+  document.getElementById('ep-sub').textContent=isEnc?'Enter your password to permanently decrypt this note':'Protect this note with AES-256 encryption';
+  document.getElementById('ep-encrypt-fields').style.display=isEnc?'none':'block';
+  document.getElementById('ep-decrypt-fields').style.display=isEnc?'block':'none';
+  document.getElementById('ep-action-btn').textContent=isEnc?'Decrypt note':'Encrypt note';
+  document.getElementById('ep-action-btn').className=isEnc?'btn-danger':'btn-primary';
+  document.getElementById('ep-err').textContent='';
+  document.getElementById('ep-dec-err').textContent='';
+  document.getElementById('ep-pass').value='';
+  document.getElementById('ep-confirm').value='';
+  document.getElementById('ep-dec-pass').value='';
+  panel.classList.add('open');
+  setTimeout(()=>{const el=isEnc?document.getElementById('ep-dec-pass'):document.getElementById('ep-pass');el.focus();},100);
+}
+function closeEncryptPanel(){document.getElementById('encrypt-panel').classList.remove('open');}
+document.getElementById('encrypt-panel').addEventListener('click',function(e){if(e.target===this)closeEncryptPanel();});
+async function doEncryptAction(){
+  const note=notes.find(n=>n.id===currentId);if(!note)return;
+  if(note.encrypted){
+    const pass=document.getElementById('ep-dec-pass').value;
+    if(!pass){document.getElementById('ep-dec-err').textContent='Enter password';return;}
+    try{
+      const plain=await decryptText(note.body,pass,note.iv,note.salt);
+      note.body=plain;note.encrypted=false;note.iv=null;note.salt=null;
+      delete unlocked[note.id];
+      closeEncryptPanel();
+      document.getElementById('encrypt-badge').style.display='none';
+      document.getElementById('md-editor').value=plain;
+      renderPreview(plain);
+      hideUnlockOverlay();
+      renderList();
+    }catch(e){document.getElementById('ep-dec-err').textContent='Incorrect password';}
+  }else{
+    const pass=document.getElementById('ep-pass').value;
+    const conf=document.getElementById('ep-confirm').value;
+    if(!pass){document.getElementById('ep-err').textContent='Enter a password';return;}
+    if(pass!==conf){document.getElementById('ep-err').textContent='Passwords do not match';return;}
+    if(pass.length<4){document.getElementById('ep-err').textContent='Password must be at least 4 characters';return;}
+    const body=document.getElementById('md-editor').value;
+    const{cipher,iv,salt}=await encryptText(body,pass);
+    note.body=cipher;note.encrypted=true;note.iv=iv;note.salt=salt;
+    unlocked[note.id]=body;
+    closeEncryptPanel();
+    document.getElementById('encrypt-badge').style.display='inline-flex';
+    renderList();
+  }
+}
+['ep-pass','ep-confirm','ep-dec-pass'].forEach(id=>{
+  document.getElementById(id).addEventListener('keydown',e=>{if(e.key==='Enter')doEncryptAction();});
+});
+async function deriveKey(pass,salt){
+  const enc=new TextEncoder();
+  const keyMat=await crypto.subtle.importKey('raw',enc.encode(pass),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'},keyMat,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+async function encryptText(plain,pass){
+  const enc=new TextEncoder();
+  const salt=crypto.getRandomValues(new Uint8Array(16));
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const key=await deriveKey(pass,salt);
+  const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,enc.encode(plain));
+  return{cipher:btoa(String.fromCharCode(...new Uint8Array(cipher))),iv:btoa(String.fromCharCode(...iv)),salt:btoa(String.fromCharCode(...salt))};
+}
+async function decryptText(cipher64,pass,iv64,salt64){
+  const dec=new TextDecoder();
+  const from64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+  const key=await deriveKey(pass,from64(salt64));
+  const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:from64(iv64)},key,from64(cipher64));
+  return dec.decode(plain);
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')closeEncryptPanel();
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
+  if(e.key==='n'||e.key==='N')createNote();
+  if((e.ctrlKey||e.metaKey)&&e.key==='f'){e.preventDefault();document.getElementById('search-input').focus();}
+});
+(function(){
+  const root=document.documentElement;
+  const btn=document.getElementById('theme-toggle');
+  let d=matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';
+  root.setAttribute('data-theme',d);
+  setIcon(d);
+  btn.addEventListener('click',()=>{d=d==='dark'?'light':'dark';root.setAttribute('data-theme',d);setIcon(d);});
+  function setIcon(t){btn.innerHTML=t==='dark'?'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>':'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';}
+})();
+document.getElementById('toggle-sidebar').addEventListener('click',()=>{
+  document.getElementById('sidebar').classList.toggle('mobile-open');
+});
+</script>
+</body>
+</html>
