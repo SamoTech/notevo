@@ -5,14 +5,19 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 
+const MAX_ATTEMPTS = 3
+const LOCKOUT_DURATION = 120_000 // 2 minutes
+
 export default function Signup() {
-  const [email, setEmail]       = useState('')
-  const [password, setPassword] = useState('')
-  const [confirm, setConfirm]   = useState('')
-  const [showPw, setShowPw]     = useState(false)
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState('')
-  const [done, setDone]         = useState(false)
+  const [email, setEmail]               = useState('')
+  const [password, setPassword]         = useState('')
+  const [confirm, setConfirm]           = useState('')
+  const [showPw, setShowPw]             = useState(false)
+  const [loading, setLoading]           = useState(false)
+  const [error, setError]               = useState('')
+  const [done, setDone]                 = useState(false)
+  const [attempts, setAttempts]         = useState(0)
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
   const router = useRouter()
 
   const strength = password.length === 0 ? 0
@@ -25,6 +30,14 @@ export default function Signup() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Rate limiting check
+    if (lockoutUntil && Date.now() < lockoutUntil) {
+      const remaining = Math.ceil((lockoutUntil - Date.now()) / 1000)
+      setError(`Too many attempts. Try again in ${remaining}s`)
+      return
+    }
+
     if (password !== confirm) { setError('Passwords do not match'); return }
     if (password.length < 8)  { setError('Password must be at least 8 characters'); return }
 
@@ -39,8 +52,19 @@ export default function Signup() {
         options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
       })
 
+      // Clear passwords from state immediately after use
+      setPassword('')
+      setConfirm('')
+
       if (sbError) {
-        setError(sbError.message)
+        const newAttempts = attempts + 1
+        setAttempts(newAttempts)
+        if (newAttempts >= MAX_ATTEMPTS) {
+          setLockoutUntil(Date.now() + LOCKOUT_DURATION)
+          setError('Too many attempts. Locked for 2 minutes.')
+        } else {
+          setError(sbError.message)
+        }
         setLoading(false)
         return
       }
@@ -62,11 +86,13 @@ export default function Signup() {
       // Normal flow: confirmation email sent
       setLoading(false)
       setDone(true)
-    } catch (err) {
+    } catch {
       setError('Something went wrong. Please try again.')
       setLoading(false)
     }
   }
+
+  const isLocked = lockoutUntil !== null && Date.now() < lockoutUntil
 
   if (done) return (
     <div style={{minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--color-bg)', padding:'1rem'}}>
@@ -114,8 +140,8 @@ export default function Signup() {
           <div>
             <label style={{display:'block', fontSize:'var(--text-sm)', fontWeight:500, marginBottom:'0.4rem', color:'var(--color-text)'}}>Email</label>
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
-              autoComplete="email" placeholder="you@example.com"
-              style={{width:'100%', padding:'0.625rem 0.875rem', border:'1px solid var(--color-border)', borderRadius:'var(--radius-md)', background:'var(--color-bg)', fontSize:'var(--text-sm)', color:'var(--color-text)', outline:'none', boxSizing:'border-box', transition:'border-color 180ms'}}
+              autoComplete="email" placeholder="you@example.com" disabled={isLocked}
+              style={{width:'100%', padding:'0.625rem 0.875rem', border:'1px solid var(--color-border)', borderRadius:'var(--radius-md)', background:'var(--color-bg)', fontSize:'var(--text-sm)', color:'var(--color-text)', outline:'none', boxSizing:'border-box', transition:'border-color 180ms', opacity: isLocked ? 0.5 : 1}}
               onFocus={e => (e.target.style.borderColor='var(--color-primary)')}
               onBlur={e => (e.target.style.borderColor='var(--color-border)')}
             />
@@ -126,8 +152,8 @@ export default function Signup() {
             <div style={{position:'relative'}}>
               <input type={showPw ? 'text' : 'password'} value={password}
                 onChange={e => setPassword(e.target.value)} required minLength={8}
-                autoComplete="new-password" placeholder="Min. 8 characters"
-                style={{width:'100%', padding:'0.625rem 2.75rem 0.625rem 0.875rem', border:'1px solid var(--color-border)', borderRadius:'var(--radius-md)', background:'var(--color-bg)', fontSize:'var(--text-sm)', color:'var(--color-text)', outline:'none', boxSizing:'border-box', transition:'border-color 180ms'}}
+                autoComplete="new-password" placeholder="Min. 8 characters" disabled={isLocked}
+                style={{width:'100%', padding:'0.625rem 2.75rem 0.625rem 0.875rem', border:'1px solid var(--color-border)', borderRadius:'var(--radius-md)', background:'var(--color-bg)', fontSize:'var(--text-sm)', color:'var(--color-text)', outline:'none', boxSizing:'border-box', transition:'border-color 180ms', opacity: isLocked ? 0.5 : 1}}
                 onFocus={e => (e.target.style.borderColor='var(--color-primary)')}
                 onBlur={e => (e.target.style.borderColor='var(--color-border)')}
               />
@@ -152,8 +178,8 @@ export default function Signup() {
           <div>
             <label style={{display:'block', fontSize:'var(--text-sm)', fontWeight:500, marginBottom:'0.4rem', color:'var(--color-text)'}}>Confirm password</label>
             <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required
-              autoComplete="new-password" placeholder="Repeat your password"
-              style={{width:'100%', padding:'0.625rem 0.875rem', border:`1px solid ${confirm && confirm !== password ? 'var(--color-error)' : 'var(--color-border)'}`, borderRadius:'var(--radius-md)', background:'var(--color-bg)', fontSize:'var(--text-sm)', color:'var(--color-text)', outline:'none', boxSizing:'border-box', transition:'border-color 180ms'}}
+              autoComplete="new-password" placeholder="Repeat your password" disabled={isLocked}
+              style={{width:'100%', padding:'0.625rem 0.875rem', border:`1px solid ${confirm && confirm !== password ? 'var(--color-error)' : 'var(--color-border)'}`, borderRadius:'var(--radius-md)', background:'var(--color-bg)', fontSize:'var(--text-sm)', color:'var(--color-text)', outline:'none', boxSizing:'border-box', transition:'border-color 180ms', opacity: isLocked ? 0.5 : 1}}
               onFocus={e => (e.target.style.borderColor='var(--color-primary)')}
               onBlur={e => { if (!confirm || confirm === password) e.target.style.borderColor='var(--color-border)' }}
             />
@@ -162,9 +188,9 @@ export default function Signup() {
             )}
           </div>
 
-          <button type="submit" disabled={loading}
-            style={{width:'100%', background:'var(--color-primary)', color:'white', padding:'0.75rem', borderRadius:'var(--radius-lg)', fontSize:'var(--text-sm)', fontWeight:500, border:'none', cursor:loading?'not-allowed':'pointer', opacity:loading?0.65:1, transition:'opacity 180ms', marginTop:'0.25rem'}}>
-            {loading
+          <button type="submit" disabled={loading || isLocked}
+            style={{width:'100%', background:'var(--color-primary)', color:'white', padding:'0.75rem', borderRadius:'var(--radius-lg)', fontSize:'var(--text-sm)', fontWeight:500, border:'none', cursor:(loading||isLocked)?'not-allowed':'pointer', opacity:(loading||isLocked)?0.65:1, transition:'opacity 180ms', marginTop:'0.25rem'}}>
+            {isLocked ? 'Locked — wait before retrying' : loading
               ? <span style={{display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem'}}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{animation:'spin 0.8s linear infinite'}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
                   Creating account…

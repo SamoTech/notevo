@@ -1,31 +1,60 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 
+const MAX_ATTEMPTS = 5
+const LOCKOUT_DURATION = 60_000 // 1 minute
+
 export default function Login() {
-  const [email, setEmail]       = useState('')
-  const [password, setPassword] = useState('')
-  const [showPw, setShowPw]     = useState(false)
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState('')
+  const [email, setEmail]             = useState('')
+  const [password, setPassword]       = useState('')
+  const [showPw, setShowPw]           = useState(false)
+  const [loading, setLoading]         = useState(false)
+  const [error, setError]             = useState('')
+  const [attempts, setAttempts]       = useState(0)
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
   const router = useRouter()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true); setError('')
+
+    // Rate limiting check
+    if (lockoutUntil && Date.now() < lockoutUntil) {
+      const remaining = Math.ceil((lockoutUntil - Date.now()) / 1000)
+      setError(`Too many failed attempts. Try again in ${remaining}s`)
+      return
+    }
+
+    setLoading(true)
+    setError('')
     const supabase = createClient()
     const { error: sbError } = await supabase.auth.signInWithPassword({ email, password })
+
+    // Clear password from state immediately after use
+    setPassword('')
+
     if (sbError) {
-      setError(sbError.message)
+      const newAttempts = attempts + 1
+      setAttempts(newAttempts)
+      if (newAttempts >= MAX_ATTEMPTS) {
+        setLockoutUntil(Date.now() + LOCKOUT_DURATION)
+        setError(`Too many failed attempts. Locked for 1 minute.`)
+      } else {
+        setError(`${sbError.message} (${newAttempts}/${MAX_ATTEMPTS} attempts)`)
+      }
       setLoading(false)
     } else {
+      setAttempts(0)
+      setLockoutUntil(null)
       router.refresh()
       router.push('/dashboard')
     }
   }
+
+  const isLocked = lockoutUntil !== null && Date.now() < lockoutUntil
 
   return (
     <div style={{minHeight:'100vh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', background:'var(--color-bg)', padding:'1rem'}}>
@@ -51,8 +80,8 @@ export default function Login() {
           <div>
             <label style={{display:'block', fontSize:'var(--text-sm)', fontWeight:500, marginBottom:'0.4rem', color:'var(--color-text)'}}>Email</label>
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
-              autoComplete="email" placeholder="you@example.com"
-              style={{width:'100%', padding:'0.625rem 0.875rem', border:'1px solid var(--color-border)', borderRadius:'var(--radius-md)', background:'var(--color-bg)', fontSize:'var(--text-sm)', color:'var(--color-text)', outline:'none', boxSizing:'border-box', transition:'border-color 180ms'}}
+              autoComplete="email" placeholder="you@example.com" disabled={isLocked}
+              style={{width:'100%', padding:'0.625rem 0.875rem', border:'1px solid var(--color-border)', borderRadius:'var(--radius-md)', background:'var(--color-bg)', fontSize:'var(--text-sm)', color:'var(--color-text)', outline:'none', boxSizing:'border-box', transition:'border-color 180ms', opacity: isLocked ? 0.5 : 1}}
               onFocus={e => (e.target.style.borderColor='var(--color-primary)')}
               onBlur={e => (e.target.style.borderColor='var(--color-border)')}
             />
@@ -65,8 +94,8 @@ export default function Login() {
             <div style={{position:'relative'}}>
               <input type={showPw ? 'text' : 'password'} value={password}
                 onChange={e => setPassword(e.target.value)} required
-                autoComplete="current-password"
-                style={{width:'100%', padding:'0.625rem 2.75rem 0.625rem 0.875rem', border:'1px solid var(--color-border)', borderRadius:'var(--radius-md)', background:'var(--color-bg)', fontSize:'var(--text-sm)', color:'var(--color-text)', outline:'none', boxSizing:'border-box', transition:'border-color 180ms'}}
+                autoComplete="current-password" disabled={isLocked}
+                style={{width:'100%', padding:'0.625rem 2.75rem 0.625rem 0.875rem', border:'1px solid var(--color-border)', borderRadius:'var(--radius-md)', background:'var(--color-bg)', fontSize:'var(--text-sm)', color:'var(--color-text)', outline:'none', boxSizing:'border-box', transition:'border-color 180ms', opacity: isLocked ? 0.5 : 1}}
                 onFocus={e => (e.target.style.borderColor='var(--color-primary)')}
                 onBlur={e => (e.target.style.borderColor='var(--color-border)')}
               />
@@ -79,9 +108,9 @@ export default function Login() {
               </button>
             </div>
           </div>
-          <button type="submit" disabled={loading}
-            style={{width:'100%', background:'var(--color-primary)', color:'white', padding:'0.75rem', borderRadius:'var(--radius-lg)', fontSize:'var(--text-sm)', fontWeight:500, border:'none', cursor:loading?'not-allowed':'pointer', opacity:loading?0.65:1, transition:'opacity 180ms', marginTop:'0.25rem'}}>
-            {loading ? 'Signing in…' : 'Sign in →'}
+          <button type="submit" disabled={loading || isLocked}
+            style={{width:'100%', background:'var(--color-primary)', color:'white', padding:'0.75rem', borderRadius:'var(--radius-lg)', fontSize:'var(--text-sm)', fontWeight:500, border:'none', cursor:(loading||isLocked)?'not-allowed':'pointer', opacity:(loading||isLocked)?0.65:1, transition:'opacity 180ms', marginTop:'0.25rem'}}>
+            {isLocked ? 'Account locked — wait 1 minute' : loading ? 'Signing in…' : 'Sign in →'}
           </button>
         </form>
 
