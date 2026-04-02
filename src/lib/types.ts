@@ -8,6 +8,7 @@ export interface Note {
   salt: string
   tags: string[]
   is_encrypted: boolean
+  pinned?: boolean
   created_at: string
   updated_at: string
 }
