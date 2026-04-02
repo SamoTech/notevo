@@ -79,7 +79,8 @@ interface LocalNote {
   salt: string | null
   createdAt: number
   updatedAt: number
-  dbId?: string
+  dbId?: string        // present = already persisted in Supabase
+  isNew?: boolean      // true = needs INSERT on first save
 }
 
 export default function Dashboard() {
@@ -95,7 +96,6 @@ export default function Dashboard() {
   const [unlocked, setUnlocked] = useState<Record<string, string>>({})
   const [unlockPass, setUnlockPass] = useState('')
   const [unlockErr, setUnlockErr] = useState('')
-  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [encryptOpen, setEncryptOpen] = useState(false)
   const [epPass, setEpPass] = useState('')
@@ -109,12 +109,11 @@ export default function Dashboard() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [loading, setLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
+  // FIX 2: track whether DB was truly empty so deleted notes don't re-appear
+  const dbWasEmpty = useRef(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const router = useRouter()
-
-  // suppress unused warning for sidebarOpen
-  void sidebarOpen
 
   // ── THEME ──
   useEffect(() => {
@@ -134,6 +133,13 @@ export default function Dashboard() {
     setTheme(next)
     document.documentElement.setAttribute('data-theme', next)
     localStorage.setItem('notevo-theme', next)
+  }
+
+  // FIX 3: sign-out handler
+  const handleSignOut = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/login')
   }
 
   // ── LOAD NOTES FROM SUPABASE ──
@@ -158,6 +164,8 @@ export default function Dashboard() {
             }))
             setNotes(mapped)
           } else {
+            // FIX 2: remember DB was empty so we only show samples once
+            dbWasEmpty.current = true
             setNotes(sampleNotes())
           }
           setLoading(false)
@@ -171,13 +179,16 @@ export default function Dashboard() {
         id: uid(), title: 'Welcome to Notevo 👋',
         body: '# Welcome to Notevo\n\nA **private**, encrypted note-taking app.\n\n## Features\n\n- ✅ Markdown editing with live preview\n- 🔐 AES-256 note encryption\n- 🏷️ Tags for organisation\n- 💾 Auto-save\n\nStart editing or press **+** to create a new one.',
         tags: ['welcome', 'demo'], encrypted: false, iv: null, salt: null,
-        createdAt: Date.now() - 86400000, updatedAt: Date.now() - 3600000
+        createdAt: Date.now() - 86400000, updatedAt: Date.now() - 3600000,
+        // FIX 2: sample notes are also marked isNew so they INSERT if edited
+        isNew: true
       },
       {
         id: uid(), title: 'Markdown cheatsheet',
         body: '# Markdown Cheatsheet\n\n**Bold**, *Italic*, `inline code`\n\n## Lists\n\n- Item one\n- Item two\n\n## Quote\n\n> The best way to predict the future is to invent it.',
         tags: ['reference'], encrypted: false, iv: null, salt: null,
-        createdAt: Date.now() - 3600000, updatedAt: Date.now() - 600000
+        createdAt: Date.now() - 3600000, updatedAt: Date.now() - 600000,
+        isNew: true
       }
     ]
   }
@@ -222,20 +233,48 @@ export default function Dashboard() {
     const encrypted_body = body
     const iv = note.iv
     const salt = note.salt
+    const titleVal = title.trim() || 'Untitled'
 
-    if (note.dbId) {
-      await supabase.from('notes').update({
-        title: title.trim() || 'Untitled',
+    // FIX 1: INSERT when note has no dbId yet (newly created note)
+    if (!note.dbId || note.isNew) {
+      const { data: inserted } = await supabase.from('notes').insert({
+        user_id: user.id,
+        title: titleVal,
         encrypted_body,
-        iv, salt,
+        iv,
+        salt,
         tags,
+        is_encrypted: note.encrypted,
+        created_at: new Date(note.createdAt).toISOString(),
+        updated_at: new Date().toISOString(),
+      }).select('id').single()
+
+      if (inserted) {
+        // store the new DB id and clear isNew flag
+        setNotes(prev => prev.map(n => n.id === currentId
+          ? { ...n, title: titleVal, body: encrypted_body, tags, updatedAt: Date.now(), dbId: inserted.id, id: inserted.id, isNew: false }
+          : n
+        ))
+        setCurrentId(inserted.id)
+      }
+    } else {
+      // UPDATE existing
+      await supabase.from('notes').update({
+        title: titleVal,
+        encrypted_body,
+        iv,
+        salt,
+        tags,
+        is_encrypted: note.encrypted,
         updated_at: new Date().toISOString()
       }).eq('id', note.dbId)
+
+      setNotes(prev => prev.map(n => n.id === currentId
+        ? { ...n, title: titleVal, body: encrypted_body, tags, updatedAt: Date.now() }
+        : n
+      ))
     }
-    setNotes(prev => prev.map(n => n.id === currentId
-      ? { ...n, title: title.trim() || 'Untitled', body: encrypted_body, tags, updatedAt: Date.now() }
-      : n
-    ))
+
     setSaveStatus('saved')
     setTimeout(() => setSaveStatus('idle'), 2000)
   }, [currentId, currentNote, title, body, tags])
@@ -253,7 +292,8 @@ export default function Dashboard() {
     const note: LocalNote = {
       id: uid(), title: '', body: '', tags: [],
       encrypted: false, iv: null, salt: null,
-      createdAt: Date.now(), updatedAt: Date.now()
+      createdAt: Date.now(), updatedAt: Date.now(),
+      isNew: true   // FIX 1: flag so doSave will INSERT
     }
     setNotes(prev => [note, ...prev])
     setCurrentId(note.id)
@@ -269,7 +309,8 @@ export default function Dashboard() {
   const deleteNote = async () => {
     if (!currentId || !currentNote) return
     if (!confirm('Delete this note? This cannot be undone.')) return
-    if (currentNote.dbId) {
+    // FIX 2: only delete from DB if it was actually saved there
+    if (currentNote.dbId && !currentNote.isNew) {
       const supabase = createClient()
       await supabase.from('notes').delete().eq('id', currentNote.dbId)
     }
@@ -533,11 +574,32 @@ export default function Dashboard() {
 
           <div style={{ flex: 1 }} />
 
+          {/* FIX 3: save status indicator */}
+          {currentId && !isLocked && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: saveStatus === 'saved' ? 'var(--primary)' : 'var(--faint)', transition: 'color .2s', marginRight: 4 }}>
+              {saveStatus === 'saved'
+                ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg> Saved</>
+                : saveStatus === 'saving'
+                ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin .8s linear infinite' }}><circle cx="12" cy="12" r="9" /></svg> Saving…</>
+                : null
+              }
+            </span>
+          )}
+
           <button className="icon-btn" onClick={toggleTheme} title="Toggle dark mode">
             {theme === 'dark'
               ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" /></svg>
               : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
             }
+          </button>
+
+          {/* FIX 3: sign-out button */}
+          <button className="icon-btn" onClick={handleSignOut} title="Sign out" style={{ marginLeft: 2 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
           </button>
         </header>
 
@@ -742,15 +804,6 @@ export default function Dashboard() {
                     <span>{wordCount} word{wordCount !== 1 ? 's' : ''}</span>
                     <span>·</span>
                     <span>{charCount} char{charCount !== 1 ? 's' : ''}</span>
-                    <div style={{ flex: 1 }} />
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: saveStatus === 'saved' ? 'var(--primary)' : 'var(--faint)', transition: 'color .2s' }}>
-                      {saveStatus === 'saved'
-                        ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg> Saved</>
-                        : saveStatus === 'saving'
-                        ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="9" /></svg> Saving…</>
-                        : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg> Saved</>
-                      }
-                    </span>
                   </div>
                 )}
               </>
