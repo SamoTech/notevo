@@ -1,18 +1,19 @@
 // AES-GCM E2E encryption using Web Crypto API
 // Password never leaves the browser
 
-// Fix #1: Increased from 100_000 → 600_000 per OWASP 2024 recommendation
+// OWASP 2024 recommendation for PBKDF2 iterations
 const PBKDF2_ITERATIONS = 600_000
-
-// Helper: ensure Uint8Array has a plain ArrayBuffer (not SharedArrayBuffer)
-// Required for Web Crypto API under TypeScript strict lib types
-function toArrayBuffer(u8: Uint8Array): ArrayBuffer {
-  return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer
-}
 
 // Helper: convert ArrayBuffer to base64 without spread (avoids TS2802)
 function bufToB64(buf: ArrayBuffer): string {
   return btoa(Array.from(new Uint8Array(buf), b => String.fromCharCode(b)).join(''))
+}
+
+// Helper: ensure data buffer has a plain ArrayBuffer (not SharedArrayBuffer).
+// Only use for plaintext/ciphertext data blobs — NOT for salt or iv,
+// because Node.js WebCrypto rejects plain ArrayBuffer for those params.
+function toArrayBuffer(u8: Uint8Array): ArrayBuffer {
+  return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer
 }
 
 export async function encryptNote(password: string, plaintext: string) {
@@ -22,27 +23,29 @@ export async function encryptNote(password: string, plaintext: string) {
 
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
-    toArrayBuffer(enc.encode(password)),
+    enc.encode(password),
     { name: 'PBKDF2' },
     false,
     ['deriveKey']
   )
   const key = await crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: toArrayBuffer(salt), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    // Pass Uint8Array directly — Node WebCrypto rejects ArrayBuffer here
+    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
     false,
     ['encrypt']
   )
   const ciphertextBuffer = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: toArrayBuffer(iv) },
+    // Pass Uint8Array directly — Node WebCrypto rejects ArrayBuffer here
+    { name: 'AES-GCM', iv },
     key,
     toArrayBuffer(enc.encode(plaintext))
   )
   return {
     ciphertext: bufToB64(ciphertextBuffer),
-    iv: bufToB64(toArrayBuffer(iv)),
-    salt: bufToB64(toArrayBuffer(salt)),
+    iv: bufToB64(iv),
+    salt: bufToB64(salt),
   }
 }
 
@@ -60,13 +63,14 @@ export async function decryptNote(
 
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
-    toArrayBuffer(enc.encode(password)),
+    enc.encode(password),
     { name: 'PBKDF2' },
     false,
     ['deriveKey']
   )
   const key = await crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: toArrayBuffer(salt), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    // Pass Uint8Array directly — Node WebCrypto rejects ArrayBuffer here
+    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
     false,
@@ -74,13 +78,14 @@ export async function decryptNote(
   )
   try {
     const plainBuffer = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: toArrayBuffer(iv) },
+      // Pass Uint8Array directly — Node WebCrypto rejects ArrayBuffer here
+      { name: 'AES-GCM', iv },
       key,
       toArrayBuffer(data)
     )
     return { success: true, text: dec.decode(plainBuffer) }
   } catch {
-    // Fix #2: Constant-time delay on failure to prevent timing attacks
+    // Constant-time delay on failure to prevent timing attacks
     await new Promise(resolve => setTimeout(resolve, 100))
     return { success: false, text: '' }
   }
