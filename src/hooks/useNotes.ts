@@ -13,6 +13,8 @@ const SAMPLE_NOTES: DecryptedNote[] = [
       '# Welcome to Notevo\n\nThis is your first note. Start writing in **Markdown**!\n\n## Features\n- 🔒 Encrypted notes\n- 📝 Live Markdown preview\n- 🌍 Multilingual UI\n- 🌙 Dark mode',
     is_encrypted: false,
     is_pinned: true,
+    iv: null,
+    salt: null,
     tags: ['welcome'],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
