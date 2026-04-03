@@ -337,7 +337,9 @@ export default function Dashboard() {
   // ── LOAD NOTES FROM SUPABASE ──
   useEffect(() => {
     const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
+
+    // Wrap in a real Promise so .catch() is always available
+    Promise.resolve(supabase.auth.getUser()).then(({ data: { user } }) => {
       if (!user) {
         // FIX 1: call setLoading(false) before redirecting so the
         // component never stays stuck on a blank loading screen.
@@ -345,51 +347,49 @@ export default function Dashboard() {
         router.push('/login')
         return
       }
-      supabase
-        .from('notes')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false })
-        .then(({ data, error }) => {
-          // FIX 2 & 3: destructure `error` and handle it explicitly.
-          // Previously only the happy path called setLoading(false);
-          // a DB error would leave loading === true forever.
-          if (error) {
-            console.error('Failed to load notes:', error.message)
-            setNotes(sampleNotes())
-            setLoading(false)
-            return
-          }
-          if (data && data.length > 0) {
-            const mapped: LocalNote[] = data.map((n: Note) => ({
-              id: n.id,
-              dbId: n.id,
-              title: n.title,
-              body: n.encrypted_body,
-              tags: n.tags || [],
-              encrypted: n.is_encrypted,
-              iv: n.iv,
-              salt: n.salt,
-              pinned: n.pinned || false,
-              createdAt: new Date(n.created_at).getTime(),
-              updatedAt: new Date(n.updated_at).getTime(),
-            }))
-            mapped.forEach(n => { persistedRef.current[n.id] = n.id })
-            setNotes(mapped)
-          } else {
-            setNotes(sampleNotes())
-          }
-          // FIX 4: setLoading(false) is now guaranteed to be called on
-          // every code path (auth failure, DB error, empty, and success).
-          setLoading(false)
-        })
-        .catch((err: unknown) => {
-          // FIX 4 (cont): catch unexpected promise rejections so loading
-          // is never left as true if the query itself throws.
-          console.error('Unexpected error loading notes:', err)
+
+      return Promise.resolve(
+        supabase
+          .from('notes')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false })
+      ).then(({ data, error }) => {
+        // FIX 2 & 3: handle error explicitly so setLoading is always called.
+        if (error) {
+          console.error('Failed to load notes:', error.message)
           setNotes(sampleNotes())
           setLoading(false)
-        })
+          return
+        }
+        if (data && data.length > 0) {
+          const mapped: LocalNote[] = data.map((n: Note) => ({
+            id: n.id,
+            dbId: n.id,
+            title: n.title,
+            body: n.encrypted_body,
+            tags: n.tags || [],
+            encrypted: n.is_encrypted,
+            iv: n.iv,
+            salt: n.salt,
+            pinned: n.pinned || false,
+            createdAt: new Date(n.created_at).getTime(),
+            updatedAt: new Date(n.updated_at).getTime(),
+          }))
+          mapped.forEach(n => { persistedRef.current[n.id] = n.id })
+          setNotes(mapped)
+        } else {
+          setNotes(sampleNotes())
+        }
+        // FIX 4: setLoading(false) is guaranteed on every code path.
+        setLoading(false)
+      })
+    }).catch((err: unknown) => {
+      // FIX 4 (cont): catch unexpected rejections so loading is never
+      // left as true if getUser() or the query itself throws.
+      console.error('Unexpected error loading notes:', err)
+      setNotes(sampleNotes())
+      setLoading(false)
     })
   }, [router])
 
@@ -1013,35 +1013,32 @@ export default function Dashboard() {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '0 10px', height: 32 }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--faint)', flexShrink: 0 }}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-                <input id="search-input" type="search" placeholder={t('search')} autoComplete="off" value={searchQ} onChange={e => setSearchQ(e.target.value)}
-                  style={{ flex: 1, fontSize: 13, background: 'none', color: 'var(--text)' }} />
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--muted)', flexShrink: 0 }}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+                <input id="search-input" value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder={t('search')} style={{ flex: 1, fontSize: 13, background: 'none', border: 'none', outline: 'none', color: 'var(--text)' }} />
               </div>
-              <button onClick={createNote} title={`${t('newNote')} (N)`}
-                style={{ width: 32, height: 32, borderRadius: 'var(--r)', flexShrink: 0, background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background .15s' }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--primary-h)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'var(--primary)')}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+              <button className="icon-btn" onClick={createNote} title={t('newNote')} style={{ background: 'var(--primary)', color: '#fff', borderRadius: 'var(--r)' }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
               </button>
             </div>
 
-            {/* Filter + Sort bar */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderBottom: '1px solid var(--divider)', flexShrink: 0 }}>
-              <button className={`stab${filterMode === 'all' ? ' active' : ''}`} onClick={() => setFilterMode('all')}>{t('all')}</button>
-              <button className={`stab${filterMode === 'encrypted' ? ' active' : ''}`} onClick={() => setFilterMode('encrypted')}>{t('encrypted')}</button>
-              <button className={`stab${filterMode === 'plain' ? ' active' : ''}`} onClick={() => setFilterMode('plain')}>{t('plain')}</button>
+            {/* filter tabs */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              {(['all', 'encrypted', 'plain'] as FilterMode[]).map(f => (
+                <button key={f} className={`stab${filterMode === f ? ' active' : ''}`} onClick={() => setFilterMode(f)}>
+                  {t(f)}
+                </button>
+              ))}
               <div style={{ flex: 1 }} />
               <div style={{ position: 'relative' }}>
-                <button className="stab" onClick={() => setSortMenuOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="3" y1="6" x2="21" y2="6" /><line x1="6" y1="12" x2="18" y2="12" /><line x1="9" y1="18" x2="15" y2="18" /></svg>
-                  {sortLabel}
+                <button className="icon-btn" style={{ width: 'auto', padding: '0 8px', fontSize: 11, gap: 4 }} onClick={() => setSortMenuOpen(v => !v)}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6" /><line x1="6" y1="12" x2="18" y2="12" /><line x1="9" y1="18" x2="15" y2="18" /></svg>
+                  <span style={{ fontWeight: 600 }}>{sortLabel}</span>
                 </button>
                 {sortMenuOpen && (
-                  <div className="dropdown-menu" style={{ right: 0, minWidth: 150 }}>
-                    {(['updated', 'created', 'title'] as SortMode[]).map(m => (
-                      <div key={m} className={`dropdown-item${sortMode === m ? ' active-item' : ''}`}
-                        onClick={() => { setSortMode(m); setSortMenuOpen(false) }}>
-                        {m === 'updated' ? t('sortUpdated') : m === 'created' ? t('sortCreated') : t('sortTitle')}
+                  <div className="dropdown-menu">
+                    {(['updated', 'created', 'title'] as SortMode[]).map(s => (
+                      <div key={s} className={`dropdown-item${sortMode === s ? ' active-item' : ''}`} onClick={() => { setSortMode(s); setSortMenuOpen(false) }}>
+                        {t('sort' + s.charAt(0).toUpperCase() + s.slice(1))}
                       </div>
                     ))}
                   </div>
@@ -1049,10 +1046,10 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Note list */}
-            <div id="note-list-scroll" style={{ flex: 1, overflowY: 'auto', padding: '6px 8px' }}>
+            {/* note list */}
+            <div id="note-list-scroll" style={{ flex: 1, overflowY: 'auto', padding: '8px 8px' }}>
               {loading ? (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120, color: 'var(--faint)', fontSize: 13 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 80, color: 'var(--muted)', fontSize: 13 }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin .8s linear infinite', marginRight: 8 }}><circle cx="12" cy="12" r="9" /></svg>
                   Loading…
                 </div>
@@ -1062,19 +1059,23 @@ export default function Dashboard() {
                   <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{t('noNotes')}</div>
                   <div style={{ fontSize: 12 }}>{t('noNotesSub')}</div>
                 </div>
-              ) : filteredNotes.map(n => (
-                <div key={n.id} className={`note-item${n.id === currentId ? ' active' : ''}`} onClick={() => selectNote(n.id)}>
+              ) : filteredNotes.map(note => (
+                <div
+                  key={note.id}
+                  className={`note-item${note.id === currentId ? ' active' : ''}`}
+                  onClick={() => selectNote(note.id)}
+                >
                   <div className="note-item-title">
-                    {n.pinned && <span style={{ marginRight: 4 }}>📌</span>}
-                    {n.encrypted && <span style={{ marginRight: 4 }}>🔐</span>}
-                    {n.title || t('untitled')}
+                    {note.pinned && <span style={{ marginRight: 4 }}>📌</span>}
+                    {note.encrypted && <span style={{ marginRight: 4 }}>🔐</span>}
+                    {escHtml(note.title || t('untitled'))}
                   </div>
                   <div className="note-item-meta">
-                    <span>{fmtDate(n.updatedAt)}</span>
-                    {n.tags.length > 0 && <span style={{ color: 'var(--primary)' }}>{n.tags.slice(0, 2).map(tg => `#${tg}`).join(' ')}</span>}
+                    <span>{fmtDate(note.updatedAt)}</span>
+                    {note.tags.length > 0 && <span style={{ color: 'var(--primary)' }}>#{note.tags[0]}</span>}
                   </div>
-                  {!n.encrypted && n.body && (
-                    <div className="note-item-excerpt">{n.body.replace(/[#*`>-]/g, '').slice(0, 60)}</div>
+                  {!note.encrypted && note.body && (
+                    <div className="note-item-excerpt">{note.body.replace(/[#*`>]/g, '').slice(0, 60)}</div>
                   )}
                 </div>
               ))}
@@ -1084,92 +1085,105 @@ export default function Dashboard() {
           {/* ── EDITOR AREA ── */}
           <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
             {!currentId ? (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', gap: 8 }}>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--faint)' }}>
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />
-                </svg>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{t('noSelected')}</div>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)' }}>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ marginBottom: 16, opacity: 0.4 }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
+                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{t('noSelected')}</div>
                 <div style={{ fontSize: 13 }}>{t('noSelectedSub')}</div>
               </div>
             ) : isLocked ? (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 }}>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--primary)' }}>
-                  <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{t('noteEncryptedTitle')}</div>
-                  <div style={{ fontSize: 13, color: 'var(--muted)' }}>{t('noteEncryptedDesc')}</div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 320 }}>
-                  <input type="password" placeholder={t('enterPass')} value={unlockPass} onChange={e => setUnlockPass(e.target.value)}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginBottom: 16, color: 'var(--primary)' }}><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{t('noteEncryptedTitle')}</div>
+                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>{t('noteEncryptedDesc')}</div>
+                <div style={{ width: '100%', maxWidth: 320, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <input
+                    type="password"
+                    value={unlockPass}
+                    onChange={e => setUnlockPass(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleUnlock()}
-                    style={{ flex: 1, height: 38, border: `1px solid ${unlockErr ? 'var(--danger)' : 'var(--border)'}`, borderRadius: 'var(--r)', padding: '0 12px', fontSize: 14, background: 'var(--surface-2)', color: 'var(--text)' }} />
-                  <button onClick={handleUnlock}
-                    style={{ height: 38, padding: '0 16px', borderRadius: 'var(--r)', background: 'var(--primary)', color: '#fff', fontSize: 13, fontWeight: 600, transition: 'background .15s' }}>
-                    {t('unlockNote')}
-                  </button>
+                    placeholder={t('enterPass')}
+                    style={{ height: 40, border: `1px solid ${unlockErr ? 'var(--danger)' : 'var(--border)'}`, borderRadius: 'var(--r)', padding: '0 14px', fontSize: 14, background: 'var(--surface-2)', color: 'var(--text)' }}
+                  />
+                  {unlockErr && <div style={{ fontSize: 12, color: 'var(--danger)' }}>{unlockErr}</div>}
+                  <button onClick={handleUnlock} style={{ height: 40, borderRadius: 'var(--r)', background: 'var(--primary)', color: '#fff', fontSize: 14, fontWeight: 600 }}>{t('unlockNote')}</button>
                 </div>
-                {unlockErr && <div style={{ fontSize: 12, color: 'var(--danger)' }}>{unlockErr}</div>}
               </div>
             ) : (
               <>
-                {/* Title + Tags */}
+                {/* title + tags row */}
                 <div style={{ padding: '12px 20px 0', flexShrink: 0 }}>
-                  <input id="note-title-input" type="text" placeholder={t('noteTitle')} value={title} onChange={e => setTitle(e.target.value)}
-                    style={{ width: '100%', fontSize: 20, fontWeight: 700, color: 'var(--text)', background: 'none', border: 'none', outline: 'none', marginBottom: 8, fontFamily: 'var(--font-body)' }} />
+                  <input
+                    id="note-title-input"
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    placeholder={t('noteTitle')}
+                    style={{ width: '100%', fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-display)', color: 'var(--text)', background: 'none', border: 'none', outline: 'none', marginBottom: 8 }}
+                  />
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                    {tags.map(tg => (
-                      <span key={tg} className="tag-chip">
-                        #{tg}
-                        <button onClick={() => setTags(prev => prev.filter(t => t !== tg))} style={{ lineHeight: 1, color: 'var(--primary)', fontSize: 13 }}>×</button>
+                    {tags.map(tag => (
+                      <span key={tag} className="tag-chip">
+                        #{tag}
+                        <button onClick={() => setTags(prev => prev.filter(t => t !== tag))} style={{ color: 'inherit', opacity: 0.6, fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
                       </span>
                     ))}
-                    <input type="text" placeholder={t('addTag')} value={tagInput} onChange={e => setTagInput(e.target.value)}
+                    <input
+                      value={tagInput}
+                      onChange={e => setTagInput(e.target.value)}
                       onKeyDown={e => {
                         if ((e.key === 'Enter' || e.key === ',') && tagInput.trim()) {
                           e.preventDefault()
-                          const tag = tagInput.trim().replace(/^#/, '').replace(/,/g, '')
-                          if (tag && !tags.includes(tag)) setTags(prev => [...prev, tag])
+                          const newTag = tagInput.trim().replace(/,/g, '')
+                          if (newTag && !tags.includes(newTag)) setTags(prev => [...prev, newTag])
                           setTagInput('')
                         }
                       }}
-                      style={{ fontSize: 12, color: 'var(--muted)', background: 'none', border: 'none', outline: 'none', width: 90 }} />
+                      placeholder={tags.length === 0 ? t('addTag') : ''}
+                      style={{ fontSize: 12, color: 'var(--muted)', background: 'none', border: 'none', outline: 'none', minWidth: 80 }}
+                    />
                   </div>
                 </div>
 
-                {/* Toolbar */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '8px 16px', borderBottom: '1px solid var(--divider)', overflowX: 'auto', flexShrink: 0 }}>
-                  {(['bold', 'italic', 'code', 'h1', 'h2', 'h3', 'ul', 'ol', 'quote', 'link'] as const).map(f => (
-                    <button key={f} className="fmt-btn" onClick={() => fmt(f)} title={t(f)}>{t(f)}</button>
+                {/* format toolbar + view toggle */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', flexShrink: 0 }}>
+                  {(['bold','italic','code','h1','h2','h3','ul','ol','quote','link'] as const).map(f => (
+                    <button key={f} className="fmt-btn" onClick={() => fmt(f)}>{t(f)}</button>
                   ))}
                   <div style={{ flex: 1 }} />
-                  <div style={{ display: 'flex', gap: 2, background: 'var(--surface-2)', borderRadius: 6, padding: 2 }}>
-                    {(['edit', 'split', 'preview'] as ViewMode[]).map(m => (
-                      <button key={m} className={`vtab${viewMode === m ? ' active' : ''}`} onClick={() => setViewMode(m)} style={{ borderRadius: 4 }}>{t(m)}</button>
+                  <div style={{ display: 'flex', gap: 2, background: 'var(--surface-2)', borderRadius: 'var(--r)', padding: 2 }}>
+                    {(['edit','split','preview'] as ViewMode[]).map(v => (
+                      <button key={v} className={`vtab${viewMode === v ? ' active' : ''}`} onClick={() => setViewMode(v)} style={{ borderRadius: 6 }}>{t(v)}</button>
                     ))}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--faint)', marginLeft: 8 }}>
+                    {wordCount} {wordCount === 1 ? t('word') : t('words')} · {charCount} {charCount === 1 ? t('char') : t('chars')}
                   </div>
                 </div>
 
-                {/* Editor + Preview */}
+                {/* editor + preview */}
                 <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
                   {showEditorPane && (
-                    <textarea id="md-textarea" ref={textareaRef} value={body} onChange={e => setBody(e.target.value)}
+                    <textarea
+                      id="md-textarea"
+                      ref={textareaRef}
+                      value={body}
+                      onChange={e => setBody(e.target.value)}
                       placeholder={t('startWriting')}
-                      style={{ flex: 1, resize: 'none', padding: '16px 20px', fontSize: 14, lineHeight: 1.7, color: 'var(--text)', background: 'var(--surface)', border: 'none', outline: 'none', fontFamily: 'monospace', overflowY: 'auto' }} />
+                      spellCheck
+                      style={{
+                        flex: 1, resize: 'none', padding: '16px 20px', fontSize: 14, lineHeight: 1.7,
+                        fontFamily: 'var(--font-body)', color: 'var(--text)', background: 'var(--bg)',
+                        border: 'none', outline: 'none', overflowY: 'auto',
+                        borderRight: viewMode === 'split' ? '1px solid var(--border)' : 'none',
+                      }}
+                    />
                   )}
-                  {viewMode === 'split' && <div style={{ width: 1, background: 'var(--divider)', flexShrink: 0 }} />}
                   {showPreviewPane && (
-                    <div id="preview-pane" style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', background: 'var(--surface)' }}
-                      dangerouslySetInnerHTML={{ __html: body ? renderMarkdown(body) : `<p style="color:var(--faint);font-size:14px">${escHtml(t('startWriting'))}</p>` }} />
+                    <div
+                      id="preview-pane"
+                      style={{ flex: 1, overflowY: 'auto', padding: '16px 24px', background: 'var(--surface)' }}
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }}
+                    />
                   )}
-                </div>
-
-                {/* Status bar */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '5px 20px', borderTop: '1px solid var(--divider)', fontSize: 11, color: 'var(--faint)', flexShrink: 0 }}>
-                  <span>{wordCount} {wordCount === 1 ? t('word') : t('words')}</span>
-                  <span>{charCount} {charCount === 1 ? t('char') : t('chars')}</span>
-                  {currentNote?.encrypted && <span style={{ color: 'var(--primary)' }}>{t('noteEncrypted')}</span>}
-                  {currentNote?.pinned && <span>{t('pinned')}</span>}
                 </div>
               </>
             )}
@@ -1178,10 +1192,9 @@ export default function Dashboard() {
 
         {/* ── ENCRYPT MODAL ── */}
         {encryptOpen && currentNote && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-            onClick={e => { if (e.target === e.currentTarget) setEncryptOpen(false) }}>
-            <div style={{ background: 'var(--surface)', borderRadius: 'var(--r-xl)', padding: 24, width: '100%', maxWidth: 380, boxShadow: 'var(--shadow-lg)' }}>
-              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setEncryptOpen(false)}>
+            <div style={{ background: 'var(--surface)', borderRadius: 'var(--r-xl)', padding: 28, width: '100%', maxWidth: 380, boxShadow: 'var(--shadow-lg)' }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 6 }}>
                 {currentNote.encrypted ? t('decryptNote') : t('encryptNote')}
               </div>
               <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>
@@ -1191,29 +1204,27 @@ export default function Dashboard() {
               {currentNote.encrypted ? (
                 <div className="field" style={{ marginBottom: 16 }}>
                   <label>{t('password')}</label>
-                  <input type="password" placeholder={t('enterPass')} value={epDecPass} onChange={e => setEpDecPass(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && doEncryptAction()} autoFocus />
-                  {epDecErr && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 5 }}>{epDecErr}</div>}
+                  <input type="password" value={epDecPass} onChange={e => setEpDecPass(e.target.value)} onKeyDown={e => e.key === 'Enter' && doEncryptAction()} placeholder={t('enterPass')} />
+                  {epDecErr && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{epDecErr}</div>}
                 </div>
               ) : (
                 <>
-                  <div className="field" style={{ marginBottom: 12 }}>
-                    <label>{t('password')}</label>
-                    <input type="password" placeholder={t('choosePass')} value={epPass} onChange={e => setEpPass(e.target.value)} autoFocus />
-                  </div>
-                  <div className="field" style={{ marginBottom: 12 }}>
-                    <label>{t('confirmPassword')}</label>
-                    <input type="password" placeholder={t('confirmPassPh')} value={epConfirm} onChange={e => setEpConfirm(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && doEncryptAction()} />
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', borderRadius: 'var(--r)', padding: '8px 12px', marginBottom: 14 }}>
+                  <div style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', borderRadius: 'var(--r)', padding: '10px 14px', fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>
                     ⚠️ {t('warnNoRecover')}
                   </div>
-                  {epErr && <div style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 10 }}>{epErr}</div>}
+                  <div className="field" style={{ marginBottom: 12 }}>
+                    <label>{t('password')}</label>
+                    <input type="password" value={epPass} onChange={e => setEpPass(e.target.value)} placeholder={t('choosePass')} />
+                  </div>
+                  <div className="field" style={{ marginBottom: 16 }}>
+                    <label>{t('confirmPassword')}</label>
+                    <input type="password" value={epConfirm} onChange={e => setEpConfirm(e.target.value)} onKeyDown={e => e.key === 'Enter' && doEncryptAction()} placeholder={t('confirmPassPh')} />
+                  </div>
+                  {epErr && <div style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 12 }}>{epErr}</div>}
                 </>
               )}
 
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 10 }}>
                 <button className="btn-cancel" onClick={() => setEncryptOpen(false)}>{t('cancel')}</button>
                 <button className={currentNote.encrypted ? 'btn-danger-action' : 'btn-primary-action'} onClick={doEncryptAction}>
                   {currentNote.encrypted ? t('decryptNote') : t('encryptNote')}
@@ -1225,34 +1236,29 @@ export default function Dashboard() {
 
         {/* ── SHORTCUTS MODAL ── */}
         {showShortcuts && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-            onClick={e => { if (e.target === e.currentTarget) setShowShortcuts(false) }}>
-            <div style={{ background: 'var(--surface)', borderRadius: 'var(--r-xl)', padding: 24, width: '100%', maxWidth: 360, boxShadow: 'var(--shadow-lg)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div style={{ fontSize: 16, fontWeight: 700 }}>{t('shortcuts')}</div>
-                <button className="icon-btn" onClick={() => setShowShortcuts(false)}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                </button>
-              </div>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setShowShortcuts(false)}>
+            <div style={{ background: 'var(--surface)', borderRadius: 'var(--r-xl)', padding: 28, width: '100%', maxWidth: 420, boxShadow: 'var(--shadow-lg)' }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 20 }}>{t('shortcuts')}</div>
               {[
                 ['N', 'New note'],
-                ['Ctrl+F', 'Search notes'],
-                ['Shift+F', 'Toggle fullscreen'],
+                ['Ctrl+F', 'Search'],
+                ['Shift+F', 'Fullscreen'],
                 ['?', 'Show shortcuts'],
-                ['Esc', 'Close modals'],
+                ['Esc', 'Close panels'],
               ].map(([key, desc]) => (
-                <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--divider)' }}>
+                <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--divider)' }}>
                   <span style={{ fontSize: 13, color: 'var(--text)' }}>{desc}</span>
                   <span className="kbd">{key}</span>
                 </div>
               ))}
+              <button onClick={() => setShowShortcuts(false)} style={{ marginTop: 20, width: '100%', height: 36, borderRadius: 'var(--r)', background: 'var(--surface-2)', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{t('shortcutsClose')}</button>
             </div>
           </div>
         )}
 
         {/* ── TOAST ── */}
         {toast && (
-          <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: 'var(--text)', color: 'var(--bg)', fontSize: 13, fontWeight: 600, padding: '10px 20px', borderRadius: 99, boxShadow: 'var(--shadow-lg)', zIndex: 600, animation: 'toast-in .2s ease', whiteSpace: 'nowrap' }}>
+          <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: 'var(--text)', color: 'var(--bg)', padding: '10px 20px', borderRadius: 'var(--r-xl)', fontSize: 13, fontWeight: 600, boxShadow: 'var(--shadow-lg)', zIndex: 600, animation: 'toast-in .2s ease', whiteSpace: 'nowrap' }}>
             {toast}
           </div>
         )}
