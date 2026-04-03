@@ -5,45 +5,64 @@ import type { SaveStatus } from '@/types/note';
 
 /**
  * Debounced autosave hook.
- * Returns the current save status so the UI can show saving/saved/error.
  *
- * @param value   - The value to watch (note content, title, etc.)
- * @param onSave  - Async function called with the latest value after debounce
- * @param delay   - Debounce delay in ms (default 1200)
+ * @param key     - Identity of the thing being edited (e.g. note ID).
+ *                  When this changes the hook resets – no spurious save fires
+ *                  just because a different note has different content.
+ * @param value   - Serialisable snapshot of everything that should be saved.
+ *                  Pass a stable JSON string or primitive so the effect can
+ *                  do a cheap equality check.
+ * @param onSave  - Async callback called after the debounce elapses.
+ * @param delay   - Debounce delay in ms (default 1 200).
  */
 export function useAutosave(
+  key: string | null,
   value: string,
-  onSave: (v: string) => Promise<void>,
+  onSave: () => Promise<void>,
   delay = 1200
 ): SaveStatus {
   const [status, setStatus] = useState<SaveStatus>('idle');
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSaved = useRef(value);
+
+  // Stable ref for the latest onSave so we never need it in the dep array.
   const onSaveRef = useRef(onSave);
+  useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
 
-  // Keep onSave ref up to date without re-triggering the effect
-  useEffect(() => {
-    onSaveRef.current = onSave;
-  }, [onSave]);
+  // Track the last value that was actually persisted for this key.
+  const lastSavedRef = useRef<string>(value);
+  const lastKeyRef   = useRef<string | null>(key);
 
   useEffect(() => {
-    if (value === lastSaved.current) return;
+    // Key changed → new note selected. Reset baseline so we don't
+    // immediately fire a save just because the content differs.
+    if (key !== lastKeyRef.current) {
+      lastKeyRef.current   = key;
+      lastSavedRef.current = value;
+      setStatus('idle');
+      return;
+    }
+
+    // Nothing actually changed since the last successful save.
+    if (value === lastSavedRef.current) return;
+
+    // Something changed – show "saving" immediately for responsive UI.
     setStatus('saving');
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(async () => {
+
+    const timer = setTimeout(async () => {
       try {
-        await onSaveRef.current(value);
-        lastSaved.current = value;
+        await onSaveRef.current();
+        lastSavedRef.current = value;
         setStatus('saved');
         setTimeout(() => setStatus('idle'), 2000);
       } catch {
         setStatus('error');
       }
     }, delay);
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, [value, delay]);
+
+    // Cancel the pending timer if value changes again before it fires,
+    // or if the component unmounts. Does NOT run on every render –
+    // only when `value`, `key`, or `delay` changes.
+    return () => clearTimeout(timer);
+  }, [key, value, delay]);
 
   return status;
 }
