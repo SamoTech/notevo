@@ -4,6 +4,9 @@ export interface EncryptedPayload {
   salt: string
 }
 
+// OWASP 2024 recommendation for PBKDF2 iterations
+const PBKDF2_ITERATIONS = 600_000
+
 function bufToBase64(buf: ArrayBuffer | Uint8Array): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
   return btoa(String.fromCharCode(...bytes))
@@ -27,7 +30,7 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
     ['deriveBits', 'deriveKey']
   )
   return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: toBuffer(salt), iterations: 100000, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: toBuffer(salt), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
     false,
@@ -57,17 +60,23 @@ export async function encryptNote(
 export async function decryptNote(
   password: string,
   payload: EncryptedPayload
-): Promise<string> {
+): Promise<{ success: true; text: string } | { success: false; text: '' }> {
   const salt = base64ToBuf(payload.salt)
   const key = await deriveKey(password, salt)
   const iv = base64ToBuf(payload.iv)
   const ciphertext = base64ToBuf(payload.ciphertext)
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: toBuffer(iv) },
-    key,
-    toBuffer(ciphertext)
-  )
-  return new TextDecoder().decode(decrypted)
+  try {
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: toBuffer(iv) },
+      key,
+      toBuffer(ciphertext)
+    )
+    return { success: true, text: new TextDecoder().decode(decrypted) }
+  } catch {
+    // Constant-time delay on failure to prevent timing attacks
+    await new Promise(resolve => setTimeout(resolve, 100))
+    return { success: false, text: '' }
+  }
 }
 
 export function isEncryptionSupported(): boolean {

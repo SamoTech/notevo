@@ -26,8 +26,14 @@ function renderMarkdownSafe(text: string): string {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    // Links: href comes from escaped text so javascript: is already neutralised
-    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+    // Links: validate URL protocol to prevent javascript: XSS
+    .replace(/\[(.+?)\]\((.+?)\)/g, (_, label, url) => {
+      const sanitizedUrl = url.trim()
+      if (/^(javascript:|vbscript:|data:|file:)/i.test(sanitizedUrl)) {
+        return `[${label}](#blocked-link)`
+      }
+      return `<a href="${sanitizedUrl}" target="_blank" rel="noopener noreferrer">${label}</a>`
+    })
     .replace(/^[*-] (.+)$/gm, '<li>$1</li>')
     .replace(/((?:<li>[\s\S]*?<\/li>\n?)+)/g, '<ul>$1</ul>')
     .replace(/\n\n/g, '</p><p>')

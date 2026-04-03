@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { encryptNote, decryptNote } from '@/lib/crypto'
 import type { Note } from '@/lib/types'
 
 // ── i18n ──────────────────────────────────────────────────
@@ -167,35 +168,11 @@ const T: Record<Locale, Record<string, string>> = {
   },
 }
 
-// ── CRYPTO (AES-GCM via Web Crypto API) ───────────────────
-async function deriveKey(pass: string, salt: Uint8Array): Promise<CryptoKey> {
-  const enc = new TextEncoder()
-  const keyMat = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey'])
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: salt.buffer as ArrayBuffer, iterations: 100000, hash: 'SHA-256' },
-    keyMat, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
-  )
-}
-async function encryptText(plain: string, pass: string) {
-  const enc = new TextEncoder()
-  const salt = crypto.getRandomValues(new Uint8Array(16))
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-  const key = await deriveKey(pass, salt)
-  const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv.buffer as ArrayBuffer }, key, enc.encode(plain))
-  const to64 = (buf: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(buf instanceof ArrayBuffer ? buf : buf)))
-  return { cipher: to64(cipher), iv: to64(iv), salt: to64(salt) }
-}
-async function decryptText(cipher64: string, pass: string, iv64: string, salt64: string): Promise<string> {
-  const dec = new TextDecoder()
-  const from64 = (s: string) => Uint8Array.from(atob(s), c => c.charCodeAt(0))
-  const saltArr = from64(salt64)
-  const ivArr = from64(iv64)
-  const key = await deriveKey(pass, saltArr)
-  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivArr.buffer as ArrayBuffer }, key, from64(cipher64))
-  return dec.decode(plain)
-}
+// ── CRYPTO (AES-GCM via Web Crypto API) ───────────────────\n// Replaced with centralized implementation in @/lib/crypto.ts\n// Using 600,000 PBKDF2 iterations per OWASP 2024 recommendation
 
 // ── MARKDOWN ──────────────────────────────────────────────
+const DANGEROUS_PROTOCOLS = /^(javascript:|vbscript:|data:|file:)/i
+
 function renderMarkdown(text: string): string {
   if (!text) return ''
   return text
@@ -208,7 +185,13 @@ function renderMarkdown(text: string): string {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/\[(.+?)\]\((.+?)\)/g, (_, label, url) => {
+      const sanitizedUrl = url.trim()
+      if (DANGEROUS_PROTOCOLS.test(sanitizedUrl)) {
+        return `[${label}](#blocked-link)`
+      }
+      return `<a href="${sanitizedUrl}" target="_blank" rel="noopener noreferrer">${label}</a>`
+    })
     .replace(/^[*-] (.+)$/gm, '<li>$1</li>')
     .replace(/((?:<li>[\s\S]*?<\/li>\n?)+)/g, '<ul>$1</ul>')
     .replace(/\n\n/g, '</p><p>')
@@ -574,10 +557,14 @@ export default function Dashboard() {
   const handleUnlock = async () => {
     if (!currentNote || !unlockPass) { setUnlockErr(t('enterPassErr')); return }
     try {
-      const plain = await decryptText(currentNote.body, unlockPass, currentNote.iv!, currentNote.salt!)
-      setUnlocked(prev => ({ ...prev, [currentId!]: plain }))
-      setBody(plain)
-      setUnlockErr('')
+      const result = await decryptNote(unlockPass, currentNote.body, currentNote.iv!, currentNote.salt!)
+      if (result.success && result.text) {
+        setUnlocked(prev => ({ ...prev, [currentId!]: result.text }))
+        setBody(result.text)
+        setUnlockErr('')
+      } else {
+        setUnlockErr(t('incorrectPass'))
+      }
     } catch {
       setUnlockErr(t('incorrectPass'))
     }
@@ -706,23 +693,27 @@ export default function Dashboard() {
     if (currentNote.encrypted) {
       if (!epDecPass) { setEpDecErr(t('enterPassErr')); return }
       try {
-        const plain = await decryptText(currentNote.body, epDecPass, currentNote.iv!, currentNote.salt!)
-        setNotes(prev => prev.map(n => n.id === currentId
-          ? { ...n, body: plain, encrypted: false, iv: null, salt: null }
-          : n
-        ))
-        setUnlocked(prev => { const next = { ...prev }; delete next[currentId!]; return next })
-        setBody(plain)
-        setEncryptOpen(false)
+        const result = await decryptNote(epDecPass, currentNote.body, currentNote.iv!, currentNote.salt!)
+        if (result.success && result.text) {
+          setNotes(prev => prev.map(n => n.id === currentId
+            ? { ...n, body: result.text, encrypted: false, iv: null, salt: null }
+            : n
+          ))
+          setUnlocked(prev => { const next = { ...prev }; delete next[currentId!]; return next })
+          setBody(result.text)
+          setEncryptOpen(false)
+        } else {
+          setEpDecErr(t('incorrectPass'))
+        }
       } catch { setEpDecErr(t('incorrectPass')) }
     } else {
       if (!epPass) { setEpErr(t('enterAPass')); return }
       if (epPass !== epConfirm) { setEpErr(t('passMismatch')); return }
       if (epPass.length < 4) { setEpErr(t('passShort')); return }
-      const { cipher, iv, salt } = await encryptText(body, epPass)
+      const { ciphertext, iv, salt } = await encryptNote(epPass, body)
       setUnlocked(prev => ({ ...prev, [currentId!]: body }))
       setNotes(prev => prev.map(n => n.id === currentId
-        ? { ...n, body: cipher, encrypted: true, iv, salt }
+        ? { ...n, body: ciphertext, encrypted: true, iv, salt }
         : n
       ))
       setEncryptOpen(false)
