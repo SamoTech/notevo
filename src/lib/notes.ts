@@ -43,7 +43,7 @@ export async function fetchNotes(userId: string): Promise<DecryptedNote[]> {
 
 export async function createNote(
   userId: string,
-  partial: Partial<Omit<Note, 'id' | 'user_id' | 'created_at' | 'updated_at'>> = {}
+  partial: Partial<Omit<Note, 'id' | 'user_id' | 'notebook_id' | 'created_at' | 'updated_at'>> = {}
 ): Promise<DecryptedNote> {
   const supabase = createClient();
   const now = new Date().toISOString();
@@ -60,6 +60,7 @@ export async function createNote(
       tags: partial.tags ?? [],
       created_at: now,
       updated_at: now,
+      // notebook_id intentionally omitted — nullable, defaults to null
     })
     .select()
     .single();
