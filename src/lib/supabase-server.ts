@@ -15,10 +15,10 @@ export async function createServerSupabaseClient() {
           return cookieStore.get(name)?.value
         },
         set(name: string, value: string, options: CookieOptions) {
-          try { cookieStore.set({ name, value, ...options }) } catch {}
+          try { cookieStore.set({ name, value, ...options }) } catch (_e) { /* read-only cookie store in middleware */ }
         },
         remove(name: string, options: CookieOptions) {
-          try { cookieStore.delete({ name, ...options }) } catch {}
+          try { cookieStore.delete({ name, ...options }) } catch (_e) { /* read-only cookie store in middleware */ }
         },
       },
     }
