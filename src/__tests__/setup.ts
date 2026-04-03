@@ -1,3 +1,4 @@
+/// <reference types="vitest/globals" />
 import '@testing-library/jest-dom'
 import { webcrypto } from 'node:crypto'
 
