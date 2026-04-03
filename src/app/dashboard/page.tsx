@@ -168,7 +168,9 @@ const T: Record<Locale, Record<string, string>> = {
   },
 }
 
-// ── CRYPTO (AES-GCM via Web Crypto API) ───────────────────\n// Replaced with centralized implementation in @/lib/crypto.ts\n// Using 600,000 PBKDF2 iterations per OWASP 2024 recommendation
+// ── CRYPTO (AES-GCM via Web Crypto API) ───────────────────
+// Replaced with centralized implementation in @/lib/crypto.ts
+// Using 600,000 PBKDF2 iterations per OWASP 2024 recommendation
 
 // ── MARKDOWN ──────────────────────────────────────────────
 const DANGEROUS_PROTOCOLS = /^(javascript:|vbscript:|data:|file:)/i
@@ -336,9 +338,28 @@ export default function Dashboard() {
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) { router.push('/login'); return }
-      supabase.from('notes').select('*').eq('user_id', user.id).order('updated_at', { ascending: false })
-        .then(({ data }) => {
+      if (!user) {
+        // FIX 1: call setLoading(false) before redirecting so the
+        // component never stays stuck on a blank loading screen.
+        setLoading(false)
+        router.push('/login')
+        return
+      }
+      supabase
+        .from('notes')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+        .then(({ data, error }) => {
+          // FIX 2 & 3: destructure `error` and handle it explicitly.
+          // Previously only the happy path called setLoading(false);
+          // a DB error would leave loading === true forever.
+          if (error) {
+            console.error('Failed to load notes:', error.message)
+            setNotes(sampleNotes())
+            setLoading(false)
+            return
+          }
           if (data && data.length > 0) {
             const mapped: LocalNote[] = data.map((n: Note) => ({
               id: n.id,
@@ -358,6 +379,15 @@ export default function Dashboard() {
           } else {
             setNotes(sampleNotes())
           }
+          // FIX 4: setLoading(false) is now guaranteed to be called on
+          // every code path (auth failure, DB error, empty, and success).
+          setLoading(false)
+        })
+        .catch((err: unknown) => {
+          // FIX 4 (cont): catch unexpected promise rejections so loading
+          // is never left as true if the query itself throws.
+          console.error('Unexpected error loading notes:', err)
+          setNotes(sampleNotes())
           setLoading(false)
         })
     })
@@ -990,31 +1020,28 @@ export default function Dashboard() {
               <button onClick={createNote} title={`${t('newNote')} (N)`}
                 style={{ width: 32, height: 32, borderRadius: 'var(--r)', flexShrink: 0, background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background .15s' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--primary-h)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'var(--primary)')}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                onMouseLeave={e => (e.currentTarget.style.background = 'var(--primary)')}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
               </button>
             </div>
 
-            {/* Filter + Sort row */}
-            <div style={{ display: 'flex', alignItems: 'center', padding: '8px 12px 4px', gap: 4, flexShrink: 0, flexWrap: 'wrap' }}>
-              {(['all', 'encrypted', 'plain'] as FilterMode[]).map(f => (
-                <button key={f} className={`stab${filterMode === f ? ' active' : ''}`} onClick={() => setFilterMode(f)}>
-                  {t(f)}
-                </button>
-              ))}
+            {/* Filter + Sort bar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderBottom: '1px solid var(--divider)', flexShrink: 0 }}>
+              <button className={`stab${filterMode === 'all' ? ' active' : ''}`} onClick={() => setFilterMode('all')}>{t('all')}</button>
+              <button className={`stab${filterMode === 'encrypted' ? ' active' : ''}`} onClick={() => setFilterMode('encrypted')}>{t('encrypted')}</button>
+              <button className={`stab${filterMode === 'plain' ? ' active' : ''}`} onClick={() => setFilterMode('plain')}>{t('plain')}</button>
               <div style={{ flex: 1 }} />
-              {/* Sort dropdown */}
               <div style={{ position: 'relative' }}>
-                <button className="stab" onClick={() => setSortMenuOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button className="stab" onClick={() => setSortMenuOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="3" y1="6" x2="21" y2="6" /><line x1="6" y1="12" x2="18" y2="12" /><line x1="9" y1="18" x2="15" y2="18" /></svg>
                   {sortLabel}
                 </button>
                 {sortMenuOpen && (
-                  <div className="dropdown-menu">
-                    {(['updated', 'created', 'title'] as SortMode[]).map(s => (
-                      <div key={s} className={`dropdown-item${sortMode === s ? ' active-item' : ''}`} onClick={() => { setSortMode(s); setSortMenuOpen(false) }}>
-                        {t(s === 'updated' ? 'sortUpdated' : s === 'created' ? 'sortCreated' : 'sortTitle')}
+                  <div className="dropdown-menu" style={{ right: 0, minWidth: 150 }}>
+                    {(['updated', 'created', 'title'] as SortMode[]).map(m => (
+                      <div key={m} className={`dropdown-item${sortMode === m ? ' active-item' : ''}`}
+                        onClick={() => { setSortMode(m); setSortMenuOpen(false) }}>
+                        {m === 'updated' ? t('sortUpdated') : m === 'created' ? t('sortCreated') : t('sortTitle')}
                       </div>
                     ))}
                   </div>
@@ -1022,36 +1049,33 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div id="note-list-scroll" style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 8px' }}>
+            {/* Note list */}
+            <div id="note-list-scroll" style={{ flex: 1, overflowY: 'auto', padding: '6px 8px' }}>
               {loading ? (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
-                  <div style={{ width: 20, height: 20, border: '2px solid var(--primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120, color: 'var(--faint)', fontSize: 13 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin .8s linear infinite', marginRight: 8 }}><circle cx="12" cy="12" r="9" /></svg>
+                  Loading…
                 </div>
               ) : filteredNotes.length === 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '48px 16px', color: 'var(--faint)', textAlign: 'center' }}>
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: .4 }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
-                  <p style={{ fontSize: 13, lineHeight: 1.5 }}>{t('noNotes')}<br />{t('noNotesSub')}</p>
+                <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--muted)' }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>📝</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{t('noNotes')}</div>
+                  <div style={{ fontSize: 12 }}>{t('noNotesSub')}</div>
                 </div>
               ) : filteredNotes.map(n => (
                 <div key={n.id} className={`note-item${n.id === currentId ? ' active' : ''}`} onClick={() => selectNote(n.id)}>
                   <div className="note-item-title">
-                    {n.pinned && <span style={{ marginRight: 4, fontSize: 10 }}>📌</span>}
-                    {escHtml(n.title) || t('untitled')}
+                    {n.pinned && <span style={{ marginRight: 4 }}>📌</span>}
+                    {n.encrypted && <span style={{ marginRight: 4 }}>🔐</span>}
+                    {n.title || t('untitled')}
                   </div>
                   <div className="note-item-meta">
-                    {n.encrypted && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--primary)', opacity: .7 }}>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
-                      </span>
-                    )}
                     <span>{fmtDate(n.updatedAt)}</span>
-                    {n.tags.length > 0 && <><span>·</span><span>{n.tags.slice(0, 2).map(tag => '#' + tag).join(' ')}</span></>}
+                    {n.tags.length > 0 && <span style={{ color: 'var(--primary)' }}>{n.tags.slice(0, 2).map(tg => `#${tg}`).join(' ')}</span>}
                   </div>
-                  <div className="note-item-excerpt">
-                    {n.encrypted
-                      ? <span style={{ color: 'var(--faint)', fontStyle: 'italic' }}>{t('encryptedContent')}</span>
-                      : escHtml(n.body.replace(/#{1,6}\s?/g, '').replace(/\*\*/g, '').replace(/\*/g, '').slice(0, 80))}
-                  </div>
+                  {!n.encrypted && n.body && (
+                    <div className="note-item-excerpt">{n.body.replace(/[#*`>-]/g, '').slice(0, 60)}</div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1059,251 +1083,181 @@ export default function Dashboard() {
 
           {/* ── EDITOR AREA ── */}
           <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-
             {!currentId ? (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--faint)' }}>
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" style={{ opacity: .25 }}>
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
-                  <polyline points="10 9 9 9 8 9" />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', gap: 8 }}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--faint)' }}>
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />
                 </svg>
-                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 400, color: 'var(--muted)' }}>{t('noSelected')}</h3>
-                <p style={{ fontSize: 13, color: 'var(--faint)' }}>{t('noSelectedSub')}</p>
-                <button onClick={createNote}
-                  style={{ marginTop: 8, padding: '9px 20px', borderRadius: 'var(--r)', background: 'var(--primary)', color: '#fff', fontSize: 13, fontWeight: 600, transition: 'background .15s' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--primary-h)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'var(--primary)')}
-                >+ {t('newNote')}</button>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{t('noSelected')}</div>
+                <div style={{ fontSize: 13 }}>{t('noSelectedSub')}</div>
+              </div>
+            ) : isLocked ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 }}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--primary)' }}>
+                  <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{t('noteEncryptedTitle')}</div>
+                  <div style={{ fontSize: 13, color: 'var(--muted)' }}>{t('noteEncryptedDesc')}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 320 }}>
+                  <input type="password" placeholder={t('enterPass')} value={unlockPass} onChange={e => setUnlockPass(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleUnlock()}
+                    style={{ flex: 1, height: 38, border: `1px solid ${unlockErr ? 'var(--danger)' : 'var(--border)'}`, borderRadius: 'var(--r)', padding: '0 12px', fontSize: 14, background: 'var(--surface-2)', color: 'var(--text)' }} />
+                  <button onClick={handleUnlock}
+                    style={{ height: 38, padding: '0 16px', borderRadius: 'var(--r)', background: 'var(--primary)', color: '#fff', fontSize: 13, fontWeight: 600, transition: 'background .15s' }}>
+                    {t('unlockNote')}
+                  </button>
+                </div>
+                {unlockErr && <div style={{ fontSize: 12, color: 'var(--danger)' }}>{unlockErr}</div>}
               </div>
             ) : (
               <>
-                {/* EDITOR TITLE BAR */}
-                <div style={{ height: 44, minHeight: 44, display: 'flex', alignItems: 'center', gap: 4, padding: '0 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0 }}>
-                  <input id="note-title-input" type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder={t('noteTitle')} autoComplete="off"
-                    style={{ flex: 1, fontSize: 15, fontWeight: 600, color: 'var(--text)', background: 'none', minWidth: 0 }} />
-                  {currentNote?.pinned && (
-                    <span style={{ display: 'inline-flex', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'var(--surface-2)', color: 'var(--muted)', flexShrink: 0 }}>
-                      {t('pinned')}
-                    </span>
-                  )}
-                  {currentNote?.encrypted && (
-                    <span style={{ display: 'inline-flex', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'var(--primary-hi)', color: 'var(--primary)', flexShrink: 0 }}>
-                      {t('noteEncrypted')}
-                    </span>
-                  )}
-                </div>
-
-                {/* FORMAT TOOLBAR */}
-                {!isLocked && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '6px 12px', borderBottom: '1px solid var(--divider)', background: 'var(--surface)', flexShrink: 0, flexWrap: 'wrap' }}>
-                    <button className="fmt-btn" onClick={() => fmt('bold')} title={t('bold')}><b>B</b></button>
-                    <button className="fmt-btn" onClick={() => fmt('italic')} title={t('italic')}><i>I</i></button>
-                    <button className="fmt-btn" onClick={() => fmt('code')} title={t('code')} style={{ fontFamily: 'monospace' }}>`C`</button>
-                    <div style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 2px' }} />
-                    <button className="fmt-btn" onClick={() => fmt('h1')}>H1</button>
-                    <button className="fmt-btn" onClick={() => fmt('h2')}>H2</button>
-                    <button className="fmt-btn" onClick={() => fmt('h3')}>H3</button>
-                    <div style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 2px' }} />
-                    <button className="fmt-btn" onClick={() => fmt('ul')}>{t('ul')}</button>
-                    <button className="fmt-btn" onClick={() => fmt('ol')}>{t('ol')}</button>
-                    <button className="fmt-btn" onClick={() => fmt('quote')}>{t('quote')}</button>
-                    <button className="fmt-btn" onClick={() => fmt('link')}>{t('link')}</button>
-                    <div style={{ flex: 1 }} />
-                    <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--r)', overflow: 'hidden', flexShrink: 0 }}>
-                      {(['edit', 'split', 'preview'] as ViewMode[]).map(m => (
-                        <button key={m} className={`vtab${viewMode === m ? ' active' : ''}`} onClick={() => setViewMode(m)}>{t(m)}</button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* UNLOCK OVERLAY */}
-                {isLocked && (
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
-                    <div style={{ width: '100%', maxWidth: 340, textAlign: 'center' }}>
-                      <div style={{ width: 52, height: 52, borderRadius: 99, background: 'var(--primary-hi)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
-                      </div>
-                      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 400, marginBottom: 6, color: 'var(--text)' }}>{t('noteEncryptedTitle')}</h3>
-                      <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>{t('noteEncryptedDesc')}</p>
-                      <input type="password" value={unlockPass} onChange={e => { setUnlockPass(e.target.value); setUnlockErr('') }}
-                        onKeyDown={e => e.key === 'Enter' && handleUnlock()}
-                        placeholder={t('enterPass')} autoComplete="current-password" autoFocus
-                        style={{ width: '100%', height: 40, border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '0 14px', fontSize: 14, background: 'var(--surface-2)', color: 'var(--text)', marginBottom: 12, outline: 'none' }}
-                        onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 0 3px rgba(1,105,111,.12)' }}
-                        onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none' }}
-                      />
-                      {unlockErr && <span style={{ display: 'block', fontSize: 12, color: 'var(--danger)', marginBottom: 10 }}>{unlockErr}</span>}
-                      <button onClick={handleUnlock}
-                        style={{ width: '100%', height: 40, borderRadius: 'var(--r)', background: 'var(--primary)', color: '#fff', fontSize: 14, fontWeight: 600, border: 'none', cursor: 'pointer' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--primary-h)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'var(--primary)')}
-                      >{t('unlockNote')}</button>
-                    </div>
-                  </div>
-                )}
-
-                {/* EDITOR BODY */}
-                {!isLocked && (
-                  <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-                    {showEditorPane && (
-                      <textarea ref={textareaRef} id="md-textarea" value={body} onChange={e => setBody(e.target.value)}
-                        placeholder={t('startWriting')}
-                        style={{ flex: 1, resize: 'none', padding: '24px 28px', fontFamily: "'Inter',monospace", fontSize: 14, lineHeight: 1.7, color: 'var(--text)', background: 'var(--bg)', border: 'none', outline: 'none', overflowY: 'auto', minWidth: 0 }}
-                      />
-                    )}
-                    {viewMode === 'split' && <div style={{ width: 1, background: 'var(--border)', flexShrink: 0 }} />}
-                    {showPreviewPane && (
-                      <div id="preview-pane"
-                        dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }}
-                        style={{ flex: 1, padding: '24px 28px', overflowY: 'auto', background: 'var(--surface)', borderLeft: '1px solid var(--border)', minWidth: 0 }}
-                      />
-                    )}
-                  </div>
-                )}
-
-                {/* TAGS BAR */}
-                {!isLocked && (
-                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, padding: '7px 16px', borderTop: '1px solid var(--divider)', background: 'var(--surface)', flexShrink: 0, minHeight: 38 }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--faint)', flexShrink: 0 }}>
-                      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-                      <line x1="7" y1="7" x2="7.01" y2="7" />
-                    </svg>
-                    {tags.map(tag => (
-                      <span key={tag} className="tag-chip">
-                        {escHtml(tag)}
-                        <span onClick={() => setTags(prev => prev.filter(x => x !== tag))}
-                          style={{ opacity: .6, fontSize: 14, lineHeight: 1, cursor: 'pointer', padding: '0 1px' }}
-                          onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                          onMouseLeave={e => (e.currentTarget.style.opacity = '.6')}
-                        >×</span>
+                {/* Title + Tags */}
+                <div style={{ padding: '12px 20px 0', flexShrink: 0 }}>
+                  <input id="note-title-input" type="text" placeholder={t('noteTitle')} value={title} onChange={e => setTitle(e.target.value)}
+                    style={{ width: '100%', fontSize: 20, fontWeight: 700, color: 'var(--text)', background: 'none', border: 'none', outline: 'none', marginBottom: 8, fontFamily: 'var(--font-body)' }} />
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                    {tags.map(tg => (
+                      <span key={tg} className="tag-chip">
+                        #{tg}
+                        <button onClick={() => setTags(prev => prev.filter(t => t !== tg))} style={{ lineHeight: 1, color: 'var(--primary)', fontSize: 13 }}>×</button>
                       </span>
                     ))}
-                    <input type="text" value={tagInput} onChange={e => setTagInput(e.target.value)}
+                    <input type="text" placeholder={t('addTag')} value={tagInput} onChange={e => setTagInput(e.target.value)}
                       onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ',') {
+                        if ((e.key === 'Enter' || e.key === ',') && tagInput.trim()) {
                           e.preventDefault()
-                          const v = tagInput.trim().replace(/,/g, '')
-                          if (v && !tags.includes(v)) setTags(prev => [...prev, v])
+                          const tag = tagInput.trim().replace(/^#/, '').replace(/,/g, '')
+                          if (tag && !tags.includes(tag)) setTags(prev => [...prev, tag])
                           setTagInput('')
                         }
                       }}
-                      placeholder={t('addTag')}
-                      style={{ fontSize: 12, color: 'var(--text)', width: 80, flexShrink: 0, background: 'none', border: 'none', outline: 'none' }}
-                    />
+                      style={{ fontSize: 12, color: 'var(--muted)', background: 'none', border: 'none', outline: 'none', width: 90 }} />
                   </div>
-                )}
+                </div>
 
-                {/* STATUS BAR */}
-                {!isLocked && (
-                  <div style={{ height: 28, display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', borderTop: '1px solid var(--border)', background: 'var(--surface)', fontSize: 11, color: 'var(--muted)', flexShrink: 0 }}>
-                    <span>{wordCount} {wordCount !== 1 ? t('words') : t('word')}</span>
-                    <span>·</span>
-                    <span>{charCount} {charCount !== 1 ? t('chars') : t('char')}</span>
+                {/* Toolbar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '8px 16px', borderBottom: '1px solid var(--divider)', overflowX: 'auto', flexShrink: 0 }}>
+                  {(['bold', 'italic', 'code', 'h1', 'h2', 'h3', 'ul', 'ol', 'quote', 'link'] as const).map(f => (
+                    <button key={f} className="fmt-btn" onClick={() => fmt(f)} title={t(f)}>{t(f)}</button>
+                  ))}
+                  <div style={{ flex: 1 }} />
+                  <div style={{ display: 'flex', gap: 2, background: 'var(--surface-2)', borderRadius: 6, padding: 2 }}>
+                    {(['edit', 'split', 'preview'] as ViewMode[]).map(m => (
+                      <button key={m} className={`vtab${viewMode === m ? ' active' : ''}`} onClick={() => setViewMode(m)} style={{ borderRadius: 4 }}>{t(m)}</button>
+                    ))}
                   </div>
-                )}
+                </div>
+
+                {/* Editor + Preview */}
+                <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+                  {showEditorPane && (
+                    <textarea id="md-textarea" ref={textareaRef} value={body} onChange={e => setBody(e.target.value)}
+                      placeholder={t('startWriting')}
+                      style={{ flex: 1, resize: 'none', padding: '16px 20px', fontSize: 14, lineHeight: 1.7, color: 'var(--text)', background: 'var(--surface)', border: 'none', outline: 'none', fontFamily: 'monospace', overflowY: 'auto' }} />
+                  )}
+                  {viewMode === 'split' && <div style={{ width: 1, background: 'var(--divider)', flexShrink: 0 }} />}
+                  {showPreviewPane && (
+                    <div id="preview-pane" style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', background: 'var(--surface)' }}
+                      dangerouslySetInnerHTML={{ __html: body ? renderMarkdown(body) : `<p style="color:var(--faint);font-size:14px">${escHtml(t('startWriting'))}</p>` }} />
+                  )}
+                </div>
+
+                {/* Status bar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '5px 20px', borderTop: '1px solid var(--divider)', fontSize: 11, color: 'var(--faint)', flexShrink: 0 }}>
+                  <span>{wordCount} {wordCount === 1 ? t('word') : t('words')}</span>
+                  <span>{charCount} {charCount === 1 ? t('char') : t('chars')}</span>
+                  {currentNote?.encrypted && <span style={{ color: 'var(--primary)' }}>{t('noteEncrypted')}</span>}
+                  {currentNote?.pinned && <span>{t('pinned')}</span>}
+                </div>
               </>
             )}
           </main>
         </div>
+
+        {/* ── ENCRYPT MODAL ── */}
+        {encryptOpen && currentNote && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+            onClick={e => { if (e.target === e.currentTarget) setEncryptOpen(false) }}>
+            <div style={{ background: 'var(--surface)', borderRadius: 'var(--r-xl)', padding: 24, width: '100%', maxWidth: 380, boxShadow: 'var(--shadow-lg)' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
+                {currentNote.encrypted ? t('decryptNote') : t('encryptNote')}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>
+                {currentNote.encrypted ? t('decryptDesc') : t('encryptDesc')}
+              </div>
+
+              {currentNote.encrypted ? (
+                <div className="field" style={{ marginBottom: 16 }}>
+                  <label>{t('password')}</label>
+                  <input type="password" placeholder={t('enterPass')} value={epDecPass} onChange={e => setEpDecPass(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && doEncryptAction()} autoFocus />
+                  {epDecErr && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 5 }}>{epDecErr}</div>}
+                </div>
+              ) : (
+                <>
+                  <div className="field" style={{ marginBottom: 12 }}>
+                    <label>{t('password')}</label>
+                    <input type="password" placeholder={t('choosePass')} value={epPass} onChange={e => setEpPass(e.target.value)} autoFocus />
+                  </div>
+                  <div className="field" style={{ marginBottom: 12 }}>
+                    <label>{t('confirmPassword')}</label>
+                    <input type="password" placeholder={t('confirmPassPh')} value={epConfirm} onChange={e => setEpConfirm(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && doEncryptAction()} />
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', borderRadius: 'var(--r)', padding: '8px 12px', marginBottom: 14 }}>
+                    ⚠️ {t('warnNoRecover')}
+                  </div>
+                  {epErr && <div style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 10 }}>{epErr}</div>}
+                </>
+              )}
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn-cancel" onClick={() => setEncryptOpen(false)}>{t('cancel')}</button>
+                <button className={currentNote.encrypted ? 'btn-danger-action' : 'btn-primary-action'} onClick={doEncryptAction}>
+                  {currentNote.encrypted ? t('decryptNote') : t('encryptNote')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── SHORTCUTS MODAL ── */}
+        {showShortcuts && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+            onClick={e => { if (e.target === e.currentTarget) setShowShortcuts(false) }}>
+            <div style={{ background: 'var(--surface)', borderRadius: 'var(--r-xl)', padding: 24, width: '100%', maxWidth: 360, boxShadow: 'var(--shadow-lg)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ fontSize: 16, fontWeight: 700 }}>{t('shortcuts')}</div>
+                <button className="icon-btn" onClick={() => setShowShortcuts(false)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                </button>
+              </div>
+              {[
+                ['N', 'New note'],
+                ['Ctrl+F', 'Search notes'],
+                ['Shift+F', 'Toggle fullscreen'],
+                ['?', 'Show shortcuts'],
+                ['Esc', 'Close modals'],
+              ].map(([key, desc]) => (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--divider)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text)' }}>{desc}</span>
+                  <span className="kbd">{key}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── TOAST ── */}
+        {toast && (
+          <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: 'var(--text)', color: 'var(--bg)', fontSize: 13, fontWeight: 600, padding: '10px 20px', borderRadius: 99, boxShadow: 'var(--shadow-lg)', zIndex: 600, animation: 'toast-in .2s ease', whiteSpace: 'nowrap' }}>
+            {toast}
+          </div>
+        )}
+
       </div>
-
-      {/* ── ENCRYPT PANEL ── */}
-      {encryptOpen && (
-        <div onClick={e => e.target === e.currentTarget && setEncryptOpen(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, padding: 16 }}>
-          <div style={{ background: 'var(--surface)', borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-lg)', padding: 28, width: '100%', maxWidth: 380 }}>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 400, marginBottom: 4, color: 'var(--text)' }}>
-              {currentNote?.encrypted ? t('decryptNote') : t('encryptNote')}
-            </h2>
-            <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>
-              {currentNote?.encrypted ? t('decryptDesc') : t('encryptDesc')}
-            </p>
-
-            {!currentNote?.encrypted && (
-              <div style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', borderRadius: 'var(--r)', padding: '10px 12px', marginBottom: 18, fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 8, alignItems: 'flex-start', lineHeight: 1.5 }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#e5a020', flexShrink: 0, marginTop: 1 }}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
-                <span>{t('warnNoRecover')}</span>
-              </div>
-            )}
-
-            {!currentNote?.encrypted ? (
-              <>
-                <div className="field" style={{ marginBottom: 14 }}>
-                  <label>{t('password')}</label>
-                  <input type="password" value={epPass} onChange={e => { setEpPass(e.target.value); setEpErr('') }} placeholder={t('choosePass')} autoComplete="new-password" autoFocus
-                    onKeyDown={e => e.key === 'Enter' && doEncryptAction()} />
-                </div>
-                <div className="field" style={{ marginBottom: 14 }}>
-                  <label>{t('confirmPassword')}</label>
-                  <input type="password" value={epConfirm} onChange={e => { setEpConfirm(e.target.value); setEpErr('') }} placeholder={t('confirmPassPh')} autoComplete="new-password"
-                    onKeyDown={e => e.key === 'Enter' && doEncryptAction()} />
-                </div>
-                {epErr && <span style={{ display: 'block', fontSize: 12, color: 'var(--danger)', marginBottom: 8 }}>{epErr}</span>}
-              </>
-            ) : (
-              <>
-                <div className="field" style={{ marginBottom: 14 }}>
-                  <label>{t('password')}</label>
-                  <input type="password" value={epDecPass} onChange={e => { setEpDecPass(e.target.value); setEpDecErr('') }} placeholder={t('enterPass')} autoComplete="current-password" autoFocus
-                    onKeyDown={e => e.key === 'Enter' && doEncryptAction()} />
-                </div>
-                {epDecErr && <span style={{ display: 'block', fontSize: 12, color: 'var(--danger)', marginBottom: 8 }}>{epDecErr}</span>}
-              </>
-            )}
-
-            <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
-              <button className="btn-cancel" onClick={() => setEncryptOpen(false)}>{t('cancel')}</button>
-              <button className={currentNote?.encrypted ? 'btn-danger-action' : 'btn-primary-action'} onClick={doEncryptAction}>
-                {currentNote?.encrypted ? t('decryptNote') : t('encryptNote')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── KEYBOARD SHORTCUTS OVERLAY ── */}
-      {showShortcuts && (
-        <div onClick={e => e.target === e.currentTarget && setShowShortcuts(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 600, padding: 16 }}>
-          <div style={{ background: 'var(--surface)', borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-lg)', padding: 28, width: '100%', maxWidth: 420 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 400, color: 'var(--text)' }}>{t('shortcuts')}</h2>
-              <button className="icon-btn" onClick={() => setShowShortcuts(false)}>×</button>
-            </div>
-            {[
-              ['N', t('newNote')],
-              ['Ctrl + F', t('search')],
-              ['Shift + F', t('fullscreen')],
-              ['?', t('shortcuts')],
-              ['Esc', t('shortcutsClose')],
-              ['Ctrl + B', t('bold')],
-              ['Ctrl + I', t('italic')],
-            ].map(([key, desc]) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--divider)' }}>
-                <span style={{ fontSize: 13, color: 'var(--muted)' }}>{desc}</span>
-                <kbd className="kbd">{key}</kbd>
-              </div>
-            ))}
-            <button className="btn-primary-action" style={{ width: '100%', marginTop: 20 }} onClick={() => setShowShortcuts(false)}>
-              {t('shortcutsClose')}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── TOAST ── */}
-      {toast && (
-        <div style={{
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: 'var(--text)', color: 'var(--bg)', padding: '10px 20px', borderRadius: 99,
-          fontSize: 13, fontWeight: 500, zIndex: 900, boxShadow: 'var(--shadow-lg)',
-          animation: 'toast-in .2s ease',
-        }}>
-          {toast}
-        </div>
-      )}
     </>
   )
 }
