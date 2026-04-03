@@ -1,12 +1,9 @@
 import '@testing-library/jest-dom'
-
-// jsdom defines globalThis.crypto as a read-only getter, so a plain
-// assignment throws "Cannot set property crypto … which has only a getter".
-// We use Object.defineProperty to forcibly override it with Node's full
-// WebCrypto implementation (which includes crypto.subtle).
 import { webcrypto } from 'node:crypto'
-Object.defineProperty(globalThis, 'crypto', {
-  value: webcrypto,
-  writable: true,
-  configurable: true,
-})
+
+// jsdom re-defines globalThis.crypto as a getter-only property during
+// environment boot, which happens AFTER the setup file runs – meaning
+// Object.defineProperty here gets overwritten before any test executes.
+// vi.stubGlobal is applied by Vitest after the environment is ready,
+// so it is the only reliable way to inject crypto.subtle into jsdom workers.
+vi.stubGlobal('crypto', webcrypto)

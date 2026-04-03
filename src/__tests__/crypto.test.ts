@@ -1,3 +1,6 @@
+// @vitest-environment node
+// crypto.test.ts has no DOM dependencies – run in Node so that
+// crypto.subtle is available natively without any polyfill.
 import { describe, it, expect } from 'vitest'
 import { encryptNote, decryptNote } from '@/lib/crypto'
 
