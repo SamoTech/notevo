@@ -36,7 +36,7 @@
     "eslint": "^9",
     "@eslint/js": "^9",
     "typescript-eslint": "^8",
-    "eslint-plugin-react": "7.37.5",
+    "@eslint-react/eslint-plugin": "^1",
     "eslint-plugin-react-hooks": "^5",
     "@next/eslint-plugin-next": "^15.3.0",
     "vitest": "^1.6.0",
@@ -48,8 +48,6 @@
     "@types/jsdom": "^21.1.7"
   },
   "overrides": {
-    "caniuse-lite": "^1.0.30001700",
-    "object.fromentries": "^2.0.8",
-    "es-abstract": "^1.23.3"
+    "caniuse-lite": "^1.0.30001700"
   }
 }
