@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Notevo — Private Encrypted Notes',
     description: 'Free, private, encrypted note-taking. Your notes never leave your device.',
-    url: 'https://notevo.vercel.app',
+    url: 'https://notevo-io.vercel.app',
     siteName: 'Notevo',
     type: 'website',
   },
