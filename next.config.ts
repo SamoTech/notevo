@@ -21,9 +21,11 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self'",
+              // Next.js RSC streaming and hydration require 'unsafe-inline'.
+              // For a stricter setup, use a nonce-based CSP via middleware instead.
+              "script-src 'self' 'unsafe-inline'",
               "style-src 'self' 'unsafe-inline' https://api.fontshare.com https://fonts.googleapis.com",
-              "font-src 'self' https://api.fontshare.com https://fonts.gstatic.com",
+              "font-src 'self' data: https://api.fontshare.com https://fonts.gstatic.com",
               "img-src 'self' data: https:",
               "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
               "frame-ancestors 'none'",
