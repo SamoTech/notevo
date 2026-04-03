@@ -9,15 +9,17 @@ const SAMPLE_NOTES: DecryptedNote[] = [
     id: 'sample-1',
     user_id: '',
     title: 'Welcome to Notevo',
-    content:
+    encrypted_body:
       '# Welcome to Notevo\n\nThis is your first note. Start writing in **Markdown**!\n\n## Features\n- 🔒 Encrypted notes\n- 📝 Live Markdown preview\n- 🌍 Multilingual UI\n- 🌙 Dark mode',
     is_encrypted: false,
-    is_pinned: true,
-    iv: null,
-    salt: null,
+    pinned: true,
+    iv: '',
+    salt: '',
     tags: ['welcome'],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    decryptedContent: undefined,
+    isUnlocked: false,
   },
 ];
 
@@ -67,11 +69,11 @@ export function useNotes(userId: string | null) {
     .filter((n) =>
       search
         ? n.title.toLowerCase().includes(search.toLowerCase()) ||
-          n.content.toLowerCase().includes(search.toLowerCase())
+          n.encrypted_body.toLowerCase().includes(search.toLowerCase())
         : true
     )
     .sort((a, b) => {
-      if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
       if (sortKey === 'title') return a.title.localeCompare(b.title);
       if (sortKey === 'created') return b.created_at.localeCompare(a.created_at);
       return b.updated_at.localeCompare(a.updated_at);
@@ -147,7 +149,7 @@ export function useNotes(userId: string | null) {
     async (id: string) => {
       const note = notes.find((n) => n.id === id);
       if (!note) return;
-      await saveNote(id, { is_pinned: !note.is_pinned });
+      await saveNote(id, { pinned: !note.pinned });
     },
     [notes, saveNote]
   );

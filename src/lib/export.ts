@@ -13,7 +13,9 @@ function triggerDownload(blob: Blob, filename: string): void {
 }
 
 export function exportNoteAsMarkdown(note: Note): void {
-  const blob = new Blob([note.content], { type: 'text/markdown;charset=utf-8' });
+  // Use decrypted content if available, otherwise fall back to encrypted_body
+  const body = (note as Note & { decryptedContent?: string }).decryptedContent ?? note.encrypted_body;
+  const blob = new Blob([body], { type: 'text/markdown;charset=utf-8' });
   const safeName = note.title.replace(/[^a-z0-9\-_. ]/gi, '_').trim() || 'note';
   triggerDownload(blob, `${safeName}.md`);
 }
@@ -40,12 +42,20 @@ export async function importNotesFromJSON(
     const note = n as Record<string, unknown>;
     return {
       title: typeof note.title === 'string' ? note.title.slice(0, 200) : 'Imported Note',
-      content: typeof note.content === 'string' ? note.content : '',
+      // Accept both old 'content' exports and current 'encrypted_body'
+      encrypted_body:
+        typeof note.encrypted_body === 'string'
+          ? note.encrypted_body
+          : typeof note.content === 'string'
+          ? note.content
+          : '',
       tags: Array.isArray(note.tags)
         ? (note.tags as unknown[]).filter((t): t is string => typeof t === 'string').slice(0, 20)
         : [],
       is_encrypted: false,
-      is_pinned: false,
+      pinned: false,
+      iv: '',
+      salt: '',
     };
   });
 }
@@ -53,11 +63,11 @@ export async function importNotesFromJSON(
 export async function importNoteFromMarkdown(
   file: File
 ): Promise<Partial<Omit<Note, 'id' | 'user_id' | 'created_at' | 'updated_at'>>> {
-  const content = await file.text();
+  const encrypted_body = await file.text();
   const title = file.name
     .replace(/\.md$/i, '')
     .replace(/_/g, ' ')
     .slice(0, 200)
     .trim() || 'Imported Note';
-  return { title, content, tags: [], is_encrypted: false, is_pinned: false };
+  return { title, encrypted_body, tags: [], is_encrypted: false, pinned: false, iv: '', salt: '' };
 }

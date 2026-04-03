@@ -24,9 +24,11 @@ export async function createNote(
     .insert({
       user_id: userId,
       title: partial.title ?? 'Untitled',
-      content: partial.content ?? '',
+      encrypted_body: partial.encrypted_body ?? '',
       is_encrypted: partial.is_encrypted ?? false,
-      is_pinned: partial.is_pinned ?? false,
+      pinned: partial.pinned ?? false,
+      iv: partial.iv ?? '',
+      salt: partial.salt ?? '',
       tags: partial.tags ?? [],
       created_at: now,
       updated_at: now,
@@ -39,7 +41,7 @@ export async function createNote(
 
 export async function updateNote(
   id: string,
-  fields: Partial<Pick<Note, 'title' | 'content' | 'is_encrypted' | 'is_pinned' | 'tags'>>
+  fields: Partial<Pick<Note, 'title' | 'encrypted_body' | 'is_encrypted' | 'pinned' | 'tags' | 'iv' | 'salt'>>
 ): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase
@@ -58,9 +60,11 @@ export async function deleteNote(id: string): Promise<void> {
 export async function duplicateNote(note: Note, userId: string): Promise<Note> {
   return createNote(userId, {
     title: `${note.title} (copy)`,
-    content: note.content,
+    encrypted_body: note.is_encrypted ? '' : note.encrypted_body,
     is_encrypted: false,
-    is_pinned: false,
+    pinned: false,
+    iv: '',
+    salt: '',
     tags: note.tags,
   });
 }
