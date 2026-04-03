@@ -14,6 +14,8 @@ export interface Note {
   content: string;
   is_encrypted: boolean;
   is_pinned: boolean;
+  iv: string | null;
+  salt: string | null;
   tags: string[];
   created_at: string;
   updated_at: string;
