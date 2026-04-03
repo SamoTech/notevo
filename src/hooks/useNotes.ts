@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import type { DecryptedNote, NoteFilter, SortKey } from '@/types/note';
 import { fetchNotes, createNote, updateNote, deleteNote, duplicateNote } from '@/lib/notes';
 
+// Shown only to unauthenticated (logged-out) visitors.
 const SAMPLE_NOTES: DecryptedNote[] = [
   {
     id: 'sample-1',
@@ -32,6 +33,7 @@ export function useNotes(userId: string | null) {
   const [search, setSearch] = useState('');
 
   const load = useCallback(async () => {
+    // Not logged in — show samples, no DB call.
     if (!userId) {
       setNotes(SAMPLE_NOTES);
       setSelectedId(SAMPLE_NOTES[0].id);
@@ -41,16 +43,12 @@ export function useNotes(userId: string | null) {
     setLoading(true);
     try {
       const data = await fetchNotes(userId);
-      if (data.length > 0) {
-        setNotes(data);
-        setSelectedId(data[0].id);
-      } else {
-        setNotes(SAMPLE_NOTES);
-        setSelectedId(SAMPLE_NOTES[0].id);
-      }
-    } catch {
-      setNotes(SAMPLE_NOTES);
-      setSelectedId(SAMPLE_NOTES[0].id);
+      // Logged-in users: show real notes (may be empty — that is valid).
+      setNotes(data);
+      setSelectedId(data[0]?.id ?? null);
+    } catch (err) {
+      console.error('Failed to load notes:', err);
+      // On error keep whatever was previously loaded; don't overwrite with samples.
     } finally {
       setLoading(false);
     }
@@ -94,21 +92,31 @@ export function useNotes(userId: string | null) {
 
   const saveNote = useCallback(
     async (id: string, fields: Partial<DecryptedNote>) => {
-      // Optimistic update
+      // Skip sample notes entirely — they are UI-only and have no DB row.
+      if (id.startsWith('sample')) {
+        setNotes((prev) =>
+          prev.map((n) =>
+            n.id === id ? { ...n, ...fields, updated_at: new Date().toISOString() } : n
+          )
+        );
+        return;
+      }
+      // Optimistic update in UI.
       setNotes((prev) =>
         prev.map((n) =>
           n.id === id ? { ...n, ...fields, updated_at: new Date().toISOString() } : n
         )
       );
-      if (!id.startsWith('sample') && userId) {
-        try {
-          await updateNote(id, fields);
-        } catch (err) {
-          console.error('Failed to save note:', err);
-        }
+      if (!userId) return;
+      try {
+        await updateNote(id, fields);
+      } catch (err) {
+        console.error('Failed to save note:', err);
+        // Reload from DB on failure to keep UI in sync.
+        load();
       }
     },
-    [userId]
+    [userId, load]
   );
 
   const removeNote = useCallback(
@@ -125,10 +133,11 @@ export function useNotes(userId: string | null) {
           await deleteNote(id);
         } catch (err) {
           console.error('Failed to delete note:', err);
+          load();
         }
       }
     },
-    [selectedId, userId]
+    [selectedId, userId, load]
   );
 
   const dupNote = useCallback(
