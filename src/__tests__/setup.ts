@@ -1,8 +1,12 @@
 import '@testing-library/jest-dom'
 
-// jsdom provides a stub crypto object but omits crypto.subtle.
-// Node.js 20 ships webcrypto; we always override globalThis.crypto so
-// that Web Crypto API calls (AES-GCM, PBKDF2) work in every test.
+// jsdom defines globalThis.crypto as a read-only getter, so a plain
+// assignment throws "Cannot set property crypto … which has only a getter".
+// We use Object.defineProperty to forcibly override it with Node's full
+// WebCrypto implementation (which includes crypto.subtle).
 import { webcrypto } from 'node:crypto'
-// @ts-expect-error – polyfill: replace jsdom's incomplete stub with Node's full WebCrypto
-globalThis.crypto = webcrypto
+Object.defineProperty(globalThis, 'crypto', {
+  value: webcrypto,
+  writable: true,
+  configurable: true,
+})
