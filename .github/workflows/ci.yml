@@ -18,7 +18,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 20
 
       - name: Cache npm dependencies
         uses: actions/cache@v4
@@ -32,7 +32,7 @@ jobs:
         run: npm install
 
       - name: Lint
-        run: npm run lint
+        run: npx eslint src --ext .ts,.tsx --max-warnings 0
 
       - name: Typecheck
         run: npx tsc --noEmit
