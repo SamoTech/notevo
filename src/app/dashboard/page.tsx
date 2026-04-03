@@ -506,7 +506,6 @@ export default function Dashboard() {
     isSavingRef.current = false
     setSaveStatus('saved')
     setTimeout(() => setSaveStatus('idle'), 2000)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
