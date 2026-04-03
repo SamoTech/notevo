@@ -3,7 +3,7 @@
  * Laverna feature: ZIP-based backup and restore
  */
 
-import { JSZip } from 'jszip';
+import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import type { Note, Notebook, Tag, UserSettings, ExportData } from './types';
 
