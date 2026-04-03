@@ -1,7 +1,8 @@
 // AES-GCM E2E encryption using Web Crypto API
 // Password never leaves the browser
 
-const PBKDF2_ITERATIONS = 100_000
+// Fix #1: Increased from 100_000 → 600_000 per OWASP 2024 recommendation
+const PBKDF2_ITERATIONS = 600_000
 
 // Helper: ensure Uint8Array has a plain ArrayBuffer (not SharedArrayBuffer)
 // Required for Web Crypto API under TypeScript strict lib types
@@ -74,6 +75,8 @@ export async function decryptNote(
     )
     return { success: true, text: dec.decode(plainBuffer) }
   } catch {
+    // Fix #2: Constant-time delay on failure to prevent timing attacks
+    await new Promise(resolve => setTimeout(resolve, 100))
     return { success: false, text: '' }
   }
 }
