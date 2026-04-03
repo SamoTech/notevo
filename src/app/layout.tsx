@@ -3,7 +3,6 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import './legal.css'
 import CookieBanner from '@/components/CookieBanner'
-import SiteFooter from '@/components/SiteFooter'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -39,12 +38,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-          <div style={{ flex: 1 }}>
-            {children}
-          </div>
-          <SiteFooter />
-        </div>
+        {children}
         <CookieBanner />
       </body>
     </html>

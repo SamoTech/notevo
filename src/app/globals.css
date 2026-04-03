@@ -2,6 +2,8 @@
   --font-display: 'Instrument Serif', Georgia, serif;
   --font-body: 'Inter', 'Helvetica Neue', sans-serif;
 
+  color-scheme: light;
+
   /* Nexus Palette */
   --color-bg: #f7f6f2;
   --color-surface: #f9f8f5;
@@ -44,6 +46,7 @@
 }
 
 [data-theme='dark'] {
+  color-scheme: dark;
   --color-bg: #141312;
   --color-surface: #1c1b19;
   --color-surface-2: #232220;
@@ -60,6 +63,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
+    color-scheme: dark;
     --color-bg: #141312;
     --color-surface: #1c1b19;
     --color-surface-2: #232220;
@@ -76,7 +80,11 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
+html {
+  -webkit-font-smoothing: antialiased;
+  scroll-behavior: smooth;
+  background-color: var(--color-bg);
+}
 body { min-height: 100dvh; font-family: var(--font-body, sans-serif); font-size: var(--text-base); color: var(--color-text); background-color: var(--color-bg); line-height: 1.6; }
 img, picture, video, canvas, svg { display: block; max-width: 100%; }
 input, button, textarea, select { font: inherit; color: inherit; }
