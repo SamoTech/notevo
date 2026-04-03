@@ -4,14 +4,23 @@
 // OWASP 2024 recommendation for PBKDF2 iterations
 const PBKDF2_ITERATIONS = 600_000
 
-// Helper: convert ArrayBuffer to base64 without spread (avoids TS2802)
-function bufToB64(buf: ArrayBuffer): string {
-  return btoa(Array.from(new Uint8Array(buf), b => String.fromCharCode(b)).join(''))
+// TypeScript's DOM lib types declare Pbkdf2Params.salt and AesGcmParams.iv
+// as ArrayBuffer. Node.js WebCrypto (used by Vitest) rejects a plain
+// ArrayBuffer produced by .buffer.slice() and requires a TypedArray.
+// We pass the Uint8Array directly and cast to satisfy tsc without
+// copying the buffer or changing the runtime value.
+function asAB(u8: Uint8Array): ArrayBuffer {
+  return u8 as unknown as ArrayBuffer
 }
 
-// Helper: ensure data buffer has a plain ArrayBuffer (not SharedArrayBuffer).
-// Only use for plaintext/ciphertext data blobs — NOT for salt or iv,
-// because Node.js WebCrypto rejects plain ArrayBuffer for those params.
+// Helper: convert ArrayBuffer/Uint8Array to base64 without spread (avoids TS2802)
+function bufToB64(buf: ArrayBuffer | Uint8Array): string {
+  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
+  return btoa(Array.from(bytes, b => String.fromCharCode(b)).join(''))
+}
+
+// Helper: ensure plaintext/ciphertext data has a plain ArrayBuffer backing.
+// Only used for data blobs — NOT for salt or iv.
 function toArrayBuffer(u8: Uint8Array): ArrayBuffer {
   return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer
 }
@@ -29,16 +38,14 @@ export async function encryptNote(password: string, plaintext: string) {
     ['deriveKey']
   )
   const key = await crypto.subtle.deriveKey(
-    // Pass Uint8Array directly — Node WebCrypto rejects ArrayBuffer here
-    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: asAB(salt), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
     false,
     ['encrypt']
   )
   const ciphertextBuffer = await crypto.subtle.encrypt(
-    // Pass Uint8Array directly — Node WebCrypto rejects ArrayBuffer here
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: asAB(iv) },
     key,
     toArrayBuffer(enc.encode(plaintext))
   )
@@ -69,8 +76,7 @@ export async function decryptNote(
     ['deriveKey']
   )
   const key = await crypto.subtle.deriveKey(
-    // Pass Uint8Array directly — Node WebCrypto rejects ArrayBuffer here
-    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: asAB(salt), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
     false,
@@ -78,8 +84,7 @@ export async function decryptNote(
   )
   try {
     const plainBuffer = await crypto.subtle.decrypt(
-      // Pass Uint8Array directly — Node WebCrypto rejects ArrayBuffer here
-      { name: 'AES-GCM', iv },
+      { name: 'AES-GCM', iv: asAB(iv) },
       key,
       toArrayBuffer(data)
     )
