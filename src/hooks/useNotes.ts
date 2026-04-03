@@ -64,12 +64,15 @@ export function useNotes(userId: string | null) {
       if (filter === 'plain') return !n.is_encrypted;
       return true;
     })
-    .filter((n) =>
-      search
-        ? n.title.toLowerCase().includes(search.toLowerCase()) ||
-          n.encrypted_body.toLowerCase().includes(search.toLowerCase())
-        : true
-    )
+    .filter((n) => {
+      if (!search) return true;
+      const q = search.toLowerCase();
+      const titleMatch = n.title.toLowerCase().includes(q);
+      // Never search through ciphertext — it is binary-as-base64 garbage.
+      // Body search is only meaningful on plaintext notes.
+      const bodyMatch = !n.is_encrypted && n.encrypted_body.toLowerCase().includes(q);
+      return titleMatch || bodyMatch;
+    })
     .sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
       if (sortKey === 'title') return a.title.localeCompare(b.title);

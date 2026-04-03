@@ -41,13 +41,13 @@ export async function fetchNotes(userId: string): Promise<DecryptedNote[]> {
   return (data ?? []).map(hydrate);
 }
 
+// Note: _userId is accepted for API consistency but intentionally unused —
+// the DB trigger sets user_id from auth.uid() server-side.
 export async function createNote(
   _userId: string,
-  partial: Partial<Omit<Note, 'id' | 'user_id' | 'notebook_id' | 'created_at' | 'updated_at'>> = {}
+  partial: Partial<Omit<Note, 'id' | 'user_id' | 'created_at' | 'updated_at'>> = {}
 ): Promise<DecryptedNote> {
   const supabase = createClient();
-  // user_id is intentionally omitted — the DB trigger sets it from auth.uid().
-  // Sending it explicitly caused 400 errors when the JWT uid didn't match.
   const { data, error } = await supabase
     .from('notes')
     .insert({
@@ -88,6 +88,7 @@ export async function deleteNote(id: string): Promise<void> {
 export async function duplicateNote(note: DecryptedNote, userId: string): Promise<DecryptedNote> {
   return createNote(userId, {
     title: `${note.title} (copy)`,
+    // Never copy ciphertext — duplicate always starts unencrypted.
     encrypted_body: note.is_encrypted ? '' : note.encrypted_body,
     is_encrypted: false,
     pinned: false,

@@ -36,7 +36,9 @@ export function useEncryption(note: DecryptedNote | null, onSave: SaveFn) {
       if (!note || !note.iv || !note.salt) return false;
       try {
         const result = await decryptContent(password, note.encrypted_body, note.iv, note.salt);
-        if (!result.success || !result.text) {
+        // Only check result.success — result.text can legitimately be an
+        // empty string if the note had no content when it was encrypted.
+        if (!result.success) {
           setUnlockError('Incorrect password. Please try again.');
           return false;
         }
