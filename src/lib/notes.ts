@@ -42,15 +42,15 @@ export async function fetchNotes(userId: string): Promise<DecryptedNote[]> {
 }
 
 export async function createNote(
-  userId: string,
+  _userId: string,
   partial: Partial<Omit<Note, 'id' | 'user_id' | 'notebook_id' | 'created_at' | 'updated_at'>> = {}
 ): Promise<DecryptedNote> {
   const supabase = createClient();
-  const now = new Date().toISOString();
+  // user_id is intentionally omitted — the DB trigger sets it from auth.uid().
+  // Sending it explicitly caused 400 errors when the JWT uid didn't match.
   const { data, error } = await supabase
     .from('notes')
     .insert({
-      user_id: userId,
       title: partial.title ?? 'Untitled',
       encrypted_body: partial.encrypted_body ?? '',
       is_encrypted: partial.is_encrypted ?? false,
@@ -58,9 +58,6 @@ export async function createNote(
       iv: partial.iv ?? '',
       salt: partial.salt ?? '',
       tags: partial.tags ?? [],
-      created_at: now,
-      updated_at: now,
-      // notebook_id intentionally omitted — nullable, defaults to null
     })
     .select()
     .single();
