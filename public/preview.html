@@ -352,7 +352,13 @@ function fmtDate(ts){
   if(d.toDateString()===now.toDateString())return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
   return d.toLocaleDateString([],{month:'short',day:'numeric'});
 }
-function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function escHtml(s){
+  return s
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
 function renderList(){
   const list=document.getElementById('note-list');
   const empty=document.getElementById('list-empty');
@@ -520,7 +526,15 @@ function renderTags(){
   note.tags.forEach(t=>{
     const span=document.createElement('span');
     span.className='tag';
-    span.innerHTML=escHtml(t)+'<span class="tag-rm" onclick="removeTag(\''+escHtml(t)+'\')">\u00d7</span>';
+    span.textContent = t;
+    const rm = document.createElement('span');
+    rm.className = 'tag-rm';
+    rm.setAttribute('data-tag', escHtml(t));
+    rm.textContent = '\u00d7';
+    rm.addEventListener('click', function(){
+      removeTag(t);
+    });
+    span.appendChild(rm);
     tl.appendChild(span);
   });
 }
