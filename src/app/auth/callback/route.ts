@@ -28,10 +28,10 @@ export async function GET(request: NextRequest) {
             return cookieStore.get(name)?.value
           },
           set(name: string, value: string, options: CookieOptions) {
-            try { cookieStore.set({ name, value, ...options }) } catch (_e) { /* read-only cookie store in middleware */ }
+            try { cookieStore.set({ name, value, ...options }) } catch { /* read-only cookie store in middleware */ }
           },
           remove(name: string, options: CookieOptions) {
-            try { cookieStore.delete({ name, ...options }) } catch (_e) { /* read-only cookie store in middleware */ }
+            try { cookieStore.delete({ name, ...options }) } catch { /* read-only cookie store in middleware */ }
           },
         },
       }

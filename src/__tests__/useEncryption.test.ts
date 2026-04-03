@@ -81,7 +81,7 @@ describe('useEncryption hook', () => {
     // Encrypt first, then decrypt to get it into unlocked map
     const plaintext = 'secret content'
     const password = 'pw123'
-    const { encryptNote: enc, decryptNote: _dec } = await import('@/lib/crypto')
+    const { encryptNote: enc } = await import('@/lib/crypto')
     const { ciphertext, iv, salt } = await enc(password, plaintext)
 
     const note = makeNote({ is_encrypted: true, content: ciphertext, iv, salt })
