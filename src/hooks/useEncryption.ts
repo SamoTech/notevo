@@ -21,8 +21,8 @@ export function useEncryption(note: DecryptedNote | null, onSave: SaveFn) {
     async (password: string) => {
       if (!note) return;
       try {
-        const { ciphertext, iv, salt } = await encryptContent(password, note.content);
-        await onSave(note.id, { content: ciphertext, is_encrypted: true, iv, salt });
+        const { ciphertext, iv, salt } = await encryptContent(password, note.encrypted_body);
+        await onSave(note.id, { encrypted_body: ciphertext, is_encrypted: true, iv, salt });
         setShowEncryptDialog(false);
       } catch {
         throw new Error('Encryption failed');
@@ -35,7 +35,7 @@ export function useEncryption(note: DecryptedNote | null, onSave: SaveFn) {
     async (password: string): Promise<boolean> => {
       if (!note || !note.iv || !note.salt) return false;
       try {
-        const result = await decryptContent(password, note.content, note.iv, note.salt);
+        const result = await decryptContent(password, note.encrypted_body, note.iv, note.salt);
         if (!result.success || !result.text) {
           setUnlockError('Incorrect password. Please try again.');
           return false;
@@ -60,10 +60,10 @@ export function useEncryption(note: DecryptedNote | null, onSave: SaveFn) {
     });
   }, []);
 
-  /** Returns decrypted content if unlocked, null if locked, raw content if not encrypted */
+  /** Returns decrypted content if unlocked, null if locked, raw body if not encrypted */
   const getDisplayContent = useCallback(
     (n: DecryptedNote): string | null => {
-      if (!n.is_encrypted) return n.content;
+      if (!n.is_encrypted) return n.encrypted_body;
       return unlockedNotes[n.id] ?? null;
     },
     [unlockedNotes]
