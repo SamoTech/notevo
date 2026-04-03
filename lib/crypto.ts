@@ -9,7 +9,7 @@ const PBKDF2_ITERATIONS = 600_000
 
 function bufToBase64(buf: ArrayBuffer | Uint8Array): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
-  return btoa(String.fromCharCode(...bytes))
+  return btoa(Array.from(bytes, b => String.fromCharCode(b)).join(''))
 }
 
 function base64ToBuf(b64: string): Uint8Array<ArrayBuffer> {

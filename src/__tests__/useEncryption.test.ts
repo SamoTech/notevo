@@ -21,11 +21,10 @@ function makeNote(overrides: Partial<DecryptedNote> = {}): DecryptedNote {
 }
 
 describe('useEncryption hook', () => {
-  // Explicitly type as () => Promise<void> so it satisfies SaveFn
-  let saveFn: ReturnType<typeof vi.fn<[], Promise<void>>>
+  let saveFn: ReturnType<typeof vi.fn<[string, Partial<DecryptedNote>], Promise<void>>>
 
   beforeEach(() => {
-    saveFn = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
+    saveFn = vi.fn<[string, Partial<DecryptedNote>], Promise<void>>().mockResolvedValue(undefined)
   })
 
   it('initialises with dialogs closed and no errors', () => {
