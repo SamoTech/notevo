@@ -21,10 +21,11 @@ function makeNote(overrides: Partial<DecryptedNote> = {}): DecryptedNote {
 }
 
 describe('useEncryption hook', () => {
-  let saveFn: ReturnType<typeof vi.fn>
+  // Explicitly type as () => Promise<void> so it satisfies SaveFn
+  let saveFn: ReturnType<typeof vi.fn<[], Promise<void>>>
 
   beforeEach(() => {
-    saveFn = vi.fn().mockResolvedValue(undefined)
+    saveFn = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
   })
 
   it('initialises with dialogs closed and no errors', () => {
@@ -78,7 +79,6 @@ describe('useEncryption hook', () => {
   })
 
   it('lockNote removes a previously unlocked note', async () => {
-    // Encrypt first, then decrypt to get it into unlocked map
     const plaintext = 'secret content'
     const password = 'pw123'
     const { encryptNote: enc } = await import('@/lib/crypto')
@@ -87,13 +87,11 @@ describe('useEncryption hook', () => {
     const note = makeNote({ is_encrypted: true, content: ciphertext, iv, salt })
     const { result } = renderHook(() => useEncryption(note, saveFn))
 
-    // Decrypt to put into unlockedNotes
     await act(async () => {
       await result.current.decryptNote(password)
     })
     expect(result.current.isUnlocked('note-1')).toBe(true)
 
-    // Lock it
     act(() => result.current.lockNote('note-1'))
     expect(result.current.isUnlocked('note-1')).toBe(false)
   })

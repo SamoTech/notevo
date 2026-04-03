@@ -10,6 +10,11 @@ function toArrayBuffer(u8: Uint8Array): ArrayBuffer {
   return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer
 }
 
+// Helper: convert ArrayBuffer to base64 without spread (avoids TS2802)
+function bufToB64(buf: ArrayBuffer): string {
+  return btoa(Array.from(new Uint8Array(buf), b => String.fromCharCode(b)).join(''))
+}
+
 export async function encryptNote(password: string, plaintext: string) {
   const enc = new TextEncoder()
   const salt = crypto.getRandomValues(new Uint8Array(16))
@@ -35,9 +40,9 @@ export async function encryptNote(password: string, plaintext: string) {
     toArrayBuffer(enc.encode(plaintext))
   )
   return {
-    ciphertext: btoa(String.fromCharCode(...new Uint8Array(ciphertextBuffer))),
-    iv: btoa(String.fromCharCode(...iv)),
-    salt: btoa(String.fromCharCode(...salt)),
+    ciphertext: bufToB64(ciphertextBuffer),
+    iv: bufToB64(toArrayBuffer(iv)),
+    salt: bufToB64(toArrayBuffer(salt)),
   }
 }
 

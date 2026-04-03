@@ -7,7 +7,8 @@ import { marked, type Renderer } from 'marked';
  */
 export async function renderMarkdownSafe(content: string): Promise<string> {
   const renderer: Partial<Renderer> = {
-    link({ href, title, text }: { href: string; title?: string | null; text: string }): string {
+    // marked v5+: link renderer receives positional args (href, title, text)
+    link(href: string, title: string | null | undefined, text: string): string {
       const safeHref = href.startsWith('javascript:') ? '#' : href;
       return `<a href="${safeHref}" title="${title ?? ''}" target="_blank" rel="noopener noreferrer">${text}</a>`;
     },

@@ -1,10 +1,9 @@
 // src/lib/notes.ts
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase';
 import type { Note } from '@/types/note';
 
-const supabase = createClientComponentClient();
-
 export async function fetchNotes(userId: string): Promise<Note[]> {
+  const supabase = createClient();
   const { data, error } = await supabase
     .from('notes')
     .select('*')
@@ -18,6 +17,7 @@ export async function createNote(
   userId: string,
   partial: Partial<Omit<Note, 'id' | 'user_id' | 'created_at' | 'updated_at'>> = {}
 ): Promise<Note> {
+  const supabase = createClient();
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('notes')
@@ -41,6 +41,7 @@ export async function updateNote(
   id: string,
   fields: Partial<Pick<Note, 'title' | 'content' | 'is_encrypted' | 'is_pinned' | 'tags'>>
 ): Promise<void> {
+  const supabase = createClient();
   const { error } = await supabase
     .from('notes')
     .update({ ...fields, updated_at: new Date().toISOString() })
@@ -49,6 +50,7 @@ export async function updateNote(
 }
 
 export async function deleteNote(id: string): Promise<void> {
+  const supabase = createClient();
   const { error } = await supabase.from('notes').delete().eq('id', id);
   if (error) throw error;
 }
