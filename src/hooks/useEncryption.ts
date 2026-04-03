@@ -1,7 +1,7 @@
 'use client';
 // src/hooks/useEncryption.ts
 import { useState, useCallback } from 'react';
-import { encryptContent, decryptContent } from '@/lib/crypto';
+import { encryptNote as encryptContent, decryptNote as decryptContent } from '@/lib/crypto';
 import type { DecryptedNote } from '@/types/note';
 
 type SaveFn = (id: string, fields: Partial<DecryptedNote>) => Promise<void>;
@@ -21,11 +21,10 @@ export function useEncryption(note: DecryptedNote | null, onSave: SaveFn) {
     async (password: string) => {
       if (!note) return;
       try {
-        const encrypted = await encryptContent(note.content, password);
-        await onSave(note.id, { content: encrypted, is_encrypted: true });
+        const { ciphertext, iv, salt } = await encryptContent(password, note.content);
+        await onSave(note.id, { content: ciphertext, is_encrypted: true, iv, salt });
         setShowEncryptDialog(false);
       } catch {
-        // Propagate to caller for display
         throw new Error('Encryption failed');
       }
     },
@@ -34,10 +33,14 @@ export function useEncryption(note: DecryptedNote | null, onSave: SaveFn) {
 
   const decryptNote = useCallback(
     async (password: string): Promise<boolean> => {
-      if (!note) return false;
+      if (!note || !note.iv || !note.salt) return false;
       try {
-        const plain = await decryptContent(note.content, password);
-        setUnlockedNotes((prev) => ({ ...prev, [note.id]: plain }));
+        const result = await decryptContent(password, note.content, note.iv, note.salt);
+        if (!result.success || !result.text) {
+          setUnlockError('Incorrect password. Please try again.');
+          return false;
+        }
+        setUnlockedNotes((prev) => ({ ...prev, [note.id]: result.text }));
         setUnlockError('');
         setShowUnlock(false);
         return true;
