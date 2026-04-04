@@ -2,6 +2,23 @@
 import { marked, type Renderer } from 'marked';
 
 /**
+ * Allowlist of URL schemes that are safe to render as href values.
+ * javascript:, data:, and vbscript: can all execute code in a browser
+ * and must never appear in rendered output.
+ *
+ * The check is case-insensitive and strips leading whitespace/control
+ * chars that browsers silently normalise before interpreting the URL.
+ */
+const SAFE_URL_SCHEME = /^(https?|mailto|ftp|tel):/i;
+
+function sanitizeHref(href: string): string {
+  // Normalise: trim whitespace and remove ASCII control characters (U+0000–U+001F)
+  // that some browsers strip before parsing the scheme.
+  const normalised = href.replace(/[\x00-\x1F\s]/g, '');
+  return SAFE_URL_SCHEME.test(normalised) || normalised.startsWith('#') || normalised.startsWith('/') ? href : '#';
+}
+
+/**
  * Renders Markdown to sanitized HTML.
  * DOMPurify only runs client-side; server returns raw marked output.
  */
@@ -9,7 +26,7 @@ export async function renderMarkdownSafe(content: string): Promise<string> {
   const renderer: Partial<Renderer> = {
     // marked v5+: link renderer receives positional args (href, title, text)
     link(href: string, title: string | null | undefined, text: string): string {
-      const safeHref = href.startsWith('javascript:') ? '#' : href;
+      const safeHref = sanitizeHref(href);
       return `<a href="${safeHref}" title="${title ?? ''}" target="_blank" rel="noopener noreferrer">${text}</a>`;
     },
   };
