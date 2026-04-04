@@ -168,10 +168,6 @@ const T: Record<Locale, Record<string, string>> = {
   },
 }
 
-// ── CRYPTO (AES-GCM via Web Crypto API) ───────────────────
-// Replaced with centralized implementation in @/lib/crypto.ts
-// Using 600,000 PBKDF2 iterations per OWASP 2024 recommendation
-
 // ── MARKDOWN ──────────────────────────────────────────────
 const DANGEROUS_PROTOCOLS = /^(javascript:|vbscript:|data:|file:)/i
 
@@ -213,11 +209,9 @@ function fmtDate(ts: number): string {
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7) }
 
-// Stable IDs for sample notes so they don't resurrect after being deleted
 const SAMPLE_WELCOME_ID = '__sample_welcome__'
 const SAMPLE_CHEATSHEET_ID = '__sample_cheatsheet__'
 
-// ── FIX #2: Persist dismissed sample note IDs in localStorage ──
 const DISMISSED_SAMPLES_KEY = 'notevo-dismissed-samples'
 
 function getDismissedSamples(): Set<string> {
@@ -241,8 +235,8 @@ type FilterMode = 'all' | 'encrypted' | 'plain'
 type SortMode = 'updated' | 'created' | 'title'
 
 interface LocalNote {
-  id: string        // stable local key — never changes after creation
-  dbId?: string     // real Supabase UUID — set after first INSERT
+  id: string
+  dbId?: string
   title: string
   body: string
   tags: string[]
@@ -290,13 +284,14 @@ export default function Dashboard() {
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isSavingRef = useRef(false)
-  // Maps local note id → real Supabase dbId (or '' for unsaved-but-known)
   const persistedRef = useRef<Record<string, string>>({})
   const currentIdRef = useRef<string | null>(null)
   const notesRef = useRef<LocalNote[]>([])
   const titleRef = useRef('')
   const bodyRef = useRef('')
   const tagsRef = useRef<string[]>([])
+  // Tracks whether the current note is encrypted (for doSave to decide which body source to use)
+  const isEncryptedRef = useRef(false)
   const importInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const router = useRouter()
@@ -334,7 +329,6 @@ export default function Dashboard() {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // RTL support for Arabic
   useEffect(() => {
     document.documentElement.setAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr')
   }, [locale])
@@ -358,7 +352,7 @@ export default function Dashboard() {
     router.push('/login')
   }
 
-  // ── LOAD NOTES FROM SUPABASE ──
+  // ── LOAD NOTES ──
   useEffect(() => {
     const supabase = createClient()
 
@@ -384,7 +378,6 @@ export default function Dashboard() {
         }
         if (data && data.length > 0) {
           const mapped: LocalNote[] = data.map((n: Note) => ({
-            // For persisted notes, local id == dbId (stable UUID from Supabase)
             id: n.id,
             dbId: n.id,
             title: n.title,
@@ -400,7 +393,6 @@ export default function Dashboard() {
           mapped.forEach(n => { persistedRef.current[n.id] = n.id })
           setNotes(mapped)
         } else {
-          // ── FIX #2: Only show sample notes that haven't been dismissed ──
           const samples = sampleNotes()
           if (samples.length > 0) setNotes(samples)
         }
@@ -413,7 +405,6 @@ export default function Dashboard() {
     })
   }, [router])
 
-  // ── FIX #2: Filter dismissed samples on load ──
   function sampleNotes(): LocalNote[] {
     const dismissed = getDismissedSamples()
     const all: LocalNote[] = [
@@ -464,10 +455,13 @@ export default function Dashboard() {
   const isLocked = !!currentNote?.encrypted && unlocked[currentId!] === undefined
 
   // ── AUTOSAVE ──
+  // KEY FIX: doSave no longer reads notesRef for body/title/tags of plain notes.
+  // Instead it reads directly from titleRef/bodyRef/tagsRef which are synced
+  // synchronously in the autosave trigger effect below.
+  // For encrypted notes, it still reads note.body from notesRef (the ciphertext).
   const doSave = useCallback(async () => {
     const id = currentIdRef.current
     if (!id) return
-    // Skip save for sample placeholder notes — they are client-only
     if (id === SAMPLE_WELCOME_ID || id === SAMPLE_CHEATSHEET_ID) return
     if (isSavingRef.current) return
     isSavingRef.current = true
@@ -481,17 +475,15 @@ export default function Dashboard() {
     if (!user) { isSavingRef.current = false; return }
 
     const titleVal = titleRef.current.trim() || 'Untitled'
-    // ── FIX: For plain notes read from bodyRef (always up-to-date).
-    //    For encrypted notes read from note.body (the ciphertext stored in notesRef).
-    const encrypted_body = note.encrypted ? note.body : bodyRef.current
     const currentTags = tagsRef.current
 
-    // persistedRef[id] is '' for brand-new unsaved notes (falsy → INSERT),
-    // and the real dbId string once persisted (truthy → UPDATE).
+    // For plain notes: always use bodyRef.current (guaranteed fresh via sync in autosave effect).
+    // For encrypted notes: use note.body from notesRef (the ciphertext — set explicitly before doSave is called).
+    const encrypted_body = isEncryptedRef.current ? note.body : bodyRef.current
+
     const existingDbId = persistedRef.current[id]
 
     if (!existingDbId) {
-      // ── INSERT ──
       const { data: inserted, error } = await supabase.from('notes').insert({
         user_id: user.id,
         title: titleVal,
@@ -518,7 +510,6 @@ export default function Dashboard() {
         )
       }
     } else {
-      // ── UPDATE ──
       await supabase.from('notes').update({
         title: titleVal,
         encrypted_body,
@@ -543,22 +534,22 @@ export default function Dashboard() {
   }, [])
 
   // ── AUTOSAVE TRIGGER ──
-  // Sync refs immediately (synchronously) before scheduling the debounce timer.
-  // This guarantees doSave always reads the latest title/body/tags regardless
-  // of React's useEffect ordering — fixing unencrypted notes not saving.
+  // Sync ALL refs synchronously before scheduling doSave.
+  // This is the single source of truth — doSave reads only from refs, never from stale closures.
   useEffect(() => {
     if (!currentId || isLocked) return
-    // Sync refs NOW, before the 800ms timer fires
+
     titleRef.current = title
     bodyRef.current = body
     tagsRef.current = tags
     currentIdRef.current = currentId
+    isEncryptedRef.current = currentNote?.encrypted ?? false
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     setSaveStatus('saving')
     saveTimerRef.current = setTimeout(doSave, 800)
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
-  }, [title, body, tags, currentId, isLocked, doSave])
+  }, [title, body, tags, currentId, isLocked, currentNote?.encrypted, doSave])
 
   // ── CREATE NOTE ──
   const createNote = () => {
@@ -567,7 +558,6 @@ export default function Dashboard() {
       encrypted: false, iv: null, salt: null, pinned: false,
       createdAt: Date.now(), updatedAt: Date.now(),
     }
-    // '' is falsy → doSave will take the INSERT path on first save
     persistedRef.current[note.id] = ''
     setNotes(prev => [note, ...prev])
     setCurrentId(note.id)
@@ -615,7 +605,6 @@ export default function Dashboard() {
   const deleteNote = async () => {
     if (!currentId || !currentNote) return
     if (!confirm(t('deleteConfirm'))) return
-    // ── FIX #2: Dismiss sample notes so they don't resurface after reload ──
     if (currentId === SAMPLE_WELCOME_ID || currentId === SAMPLE_CHEATSHEET_ID) {
       dismissSample(currentId)
     }
@@ -735,7 +724,6 @@ export default function Dashboard() {
             updatedAt: Date.now(),
           }))
         } else {
-          // .md — split by ---
           const sections = text.split(/\n---\n/)
           imported = sections.filter(s => s.trim()).map(s => {
             const lines = s.trim().split('\n')
@@ -768,17 +756,14 @@ export default function Dashboard() {
     setEncryptOpen(true)
   }
 
-  // ── FIX #3 & #4: Encrypt/Decrypt + immediate persist ──
   const doEncryptAction = async () => {
     if (!currentNote) return
     if (currentNote.encrypted) {
-      // ── DECRYPT ──
       if (!epDecPass) { setEpDecErr(t('enterPassErr')); return }
       try {
         const result = await decryptNote(epDecPass, currentNote.body, currentNote.iv!, currentNote.salt!)
         if (result.success && result.text) {
           const decryptedBody = result.text
-          // FIX #4: Synchronously update notesRef so doSave reads correct plaintext
           notesRef.current = notesRef.current.map(n =>
             n.id === currentId
               ? { ...n, body: decryptedBody, encrypted: false, iv: null, salt: null }
@@ -791,20 +776,18 @@ export default function Dashboard() {
           setUnlocked(prev => { const next = { ...prev }; delete next[currentId!]; return next })
           setBody(decryptedBody)
           bodyRef.current = decryptedBody
+          isEncryptedRef.current = false
           setEncryptOpen(false)
-          // FIX #3: Persist the decrypted state immediately
           setTimeout(doSave, 50)
         } else {
           setEpDecErr(t('incorrectPass'))
         }
       } catch { setEpDecErr(t('incorrectPass')) }
     } else {
-      // ── ENCRYPT ──
       if (!epPass) { setEpErr(t('enterAPass')); return }
       if (epPass !== epConfirm) { setEpErr(t('passMismatch')); return }
       if (epPass.length < 4) { setEpErr(t('passShort')); return }
       const { ciphertext, iv, salt } = await encryptNote(epPass, body)
-      // FIX #1 & #3: Synchronously update notesRef with ciphertext BEFORE doSave reads it
       notesRef.current = notesRef.current.map(n =>
         n.id === currentId
           ? { ...n, body: ciphertext, encrypted: true, iv, salt }
@@ -815,8 +798,8 @@ export default function Dashboard() {
         ? { ...n, body: ciphertext, encrypted: true, iv, salt }
         : n
       ))
+      isEncryptedRef.current = true
       setEncryptOpen(false)
-      // FIX #3: Persist the encrypted state immediately
       setTimeout(doSave, 50)
     }
   }
@@ -863,9 +846,6 @@ export default function Dashboard() {
 
   const sortLabel = sortMode === 'updated' ? t('sortUpdated') : sortMode === 'created' ? t('sortCreated') : t('sortTitle')
 
-  // ─────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────
   return (
     <>
       <style>{`
@@ -963,7 +943,6 @@ export default function Dashboard() {
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
 
-      {/* hidden import input */}
       <input ref={importInputRef} type="file" accept=".json,.md" style={{ display: 'none' }} onChange={handleImport} />
 
       <div id="notevo-root" style={isFullscreen ? { position: 'fixed', inset: 0, zIndex: 1000 } : {}}>
@@ -1020,17 +999,14 @@ export default function Dashboard() {
             </span>
           )}
 
-          {/* Export all */}
           <button className="icon-btn" onClick={exportAllNotes} title={t('exportAll')}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /><line x1="4" y1="3" x2="8" y2="3" /></svg>
           </button>
 
-          {/* Import */}
           <button className="icon-btn" onClick={() => importInputRef.current?.click()} title={t('importNotes')}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
           </button>
 
-          {/* Fullscreen */}
           <button className={`icon-btn${isFullscreen ? ' active-btn' : ''}`} onClick={() => setIsFullscreen(v => !v)} title={isFullscreen ? t('exitFullscreen') : t('fullscreen')}>
             {isFullscreen
               ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" /></svg>
@@ -1038,12 +1014,10 @@ export default function Dashboard() {
             }
           </button>
 
-          {/* Shortcuts help */}
           <button className="icon-btn" onClick={() => setShowShortcuts(true)} title={t('shortcuts')}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
           </button>
 
-          {/* Language picker */}
           <div style={{ position: 'relative' }}>
             <button className="icon-btn" onClick={() => setShowLangMenu(v => !v)} title={t('language')} style={{ fontSize: 13, width: 'auto', padding: '0 8px', gap: 4, display: 'flex', alignItems: 'center' }}>
               🌍 <span style={{ fontSize: 11, fontWeight: 600 }}>{locale.toUpperCase()}</span>
@@ -1092,7 +1066,6 @@ export default function Dashboard() {
               </button>
             </div>
 
-            {/* filter tabs */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
               {(['all', 'encrypted', 'plain'] as FilterMode[]).map(f => (
                 <button key={f} className={`stab${filterMode === f ? ' active' : ''}`} onClick={() => setFilterMode(f)}>
@@ -1117,7 +1090,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* note list */}
             <div id="note-list-scroll" style={{ flex: 1, overflowY: 'auto', padding: '8px 8px' }}>
               {loading ? (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 80, color: 'var(--muted)', fontSize: 13 }}>
@@ -1181,7 +1153,6 @@ export default function Dashboard() {
               </div>
             ) : (
               <>
-                {/* title + tags row */}
                 <div style={{ padding: '12px 20px 0', flexShrink: 0 }}>
                   <input
                     id="note-title-input"
@@ -1214,7 +1185,6 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* format toolbar + view toggle */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', flexShrink: 0 }}>
                   {(['bold','italic','code','h1','h2','h3','ul','ol','quote','link'] as const).map(f => (
                     <button key={f} className="fmt-btn" onClick={() => fmt(f)}>{t(f)}</button>
@@ -1230,7 +1200,6 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* editor + preview */}
                 <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
                   {showEditorPane && (
                     <textarea
