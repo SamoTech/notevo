@@ -481,8 +481,8 @@ export default function Dashboard() {
     if (!user) { isSavingRef.current = false; return }
 
     const titleVal = titleRef.current.trim() || 'Untitled'
-    // ── FIX #1: Always read from notesRef for encrypted body (already ciphertext),
-    //    or bodyRef for plaintext. notesRef is kept in sync before doSave is called.
+    // ── FIX: For plain notes read from bodyRef (always up-to-date).
+    //    For encrypted notes read from note.body (the ciphertext stored in notesRef).
     const encrypted_body = note.encrypted ? note.body : bodyRef.current
     const currentTags = tagsRef.current
 
@@ -492,9 +492,6 @@ export default function Dashboard() {
 
     if (!existingDbId) {
       // ── INSERT ──
-      // Keep the local `id` stable in React state. Only store the real
-      // Supabase UUID in persistedRef and note.dbId so subsequent saves
-      // can UPDATE correctly — without ever changing note.id.
       const { data: inserted, error } = await supabase.from('notes').insert({
         user_id: user.id,
         title: titleVal,
@@ -510,15 +507,12 @@ export default function Dashboard() {
 
       if (!error && inserted) {
         const dbId: string = inserted.id
-        // Map local id → real dbId so future saves take the UPDATE path
         persistedRef.current[id] = dbId
-        // Patch note.dbId in state (no id change — sidebar key stays stable)
         setNotes(prev => prev.map(n =>
           n.id === id
             ? { ...n, title: titleVal, body: encrypted_body, tags: currentTags, updatedAt: Date.now(), dbId }
             : n
         ))
-        // Also update the ref immediately so any in-flight save sees dbId
         notesRef.current = notesRef.current.map(n =>
           n.id === id ? { ...n, dbId } : n
         )
@@ -548,8 +542,18 @@ export default function Dashboard() {
     setTimeout(() => setSaveStatus('idle'), 2000)
   }, [])
 
+  // ── AUTOSAVE TRIGGER ──
+  // Sync refs immediately (synchronously) before scheduling the debounce timer.
+  // This guarantees doSave always reads the latest title/body/tags regardless
+  // of React's useEffect ordering — fixing unencrypted notes not saving.
   useEffect(() => {
     if (!currentId || isLocked) return
+    // Sync refs NOW, before the 800ms timer fires
+    titleRef.current = title
+    bodyRef.current = body
+    tagsRef.current = tags
+    currentIdRef.current = currentId
+
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     setSaveStatus('saving')
     saveTimerRef.current = setTimeout(doSave, 800)
@@ -600,7 +604,6 @@ export default function Dashboard() {
     if (!currentNote) return
     const newPinned = !currentNote.pinned
     setNotes(prev => prev.map(n => n.id === currentId ? { ...n, pinned: newPinned } : n))
-    // Use note.dbId (reliable) or fall back to persistedRef
     const dbId = currentNote.dbId || persistedRef.current[currentId!]
     if (dbId) {
       const supabase = createClient()
@@ -616,7 +619,6 @@ export default function Dashboard() {
     if (currentId === SAMPLE_WELCOME_ID || currentId === SAMPLE_CHEATSHEET_ID) {
       dismissSample(currentId)
     }
-    // Use note.dbId (reliable) or fall back to persistedRef
     const dbId = currentNote.dbId || persistedRef.current[currentId]
     if (dbId) {
       const supabase = createClient()
