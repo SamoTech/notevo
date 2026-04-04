@@ -11,10 +11,15 @@ import { marked, type Renderer } from 'marked';
  */
 const SAFE_URL_SCHEME = /^(https?|mailto|ftp|tel):/i;
 
+// Matches ASCII control characters U+0000–U+001F.
+// Written as a Unicode escape range to avoid triggering no-control-regex.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001F]/g;
+
 function sanitizeHref(href: string): string {
-  // Normalise: trim whitespace and remove ASCII control characters (U+0000–U+001F)
+  // Normalise: trim whitespace and remove ASCII control characters
   // that some browsers strip before parsing the scheme.
-  const normalised = href.replace(/[\x00-\x1F\s]/g, '');
+  const normalised = href.replace(CONTROL_CHARS, '').trim();
   return SAFE_URL_SCHEME.test(normalised) || normalised.startsWith('#') || normalised.startsWith('/') ? href : '#';
 }
 
