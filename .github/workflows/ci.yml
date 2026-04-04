@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Least-privilege permissions — satisfies CodeQL actions/missing-workflow-permissions (alert #5).
+# The job only needs to read the repository contents and upload artifacts;
+# no write access is required.
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Lint · Typecheck · Tests
