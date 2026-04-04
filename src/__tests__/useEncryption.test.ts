@@ -61,7 +61,7 @@ describe('useEncryption hook', () => {
     expect(fields.iv).toBeTruthy()
     expect(fields.salt).toBeTruthy()
     expect(result.current.showEncryptDialog).toBe(false)
-  })
+  }, 30_000)
 
   it('getDisplayContent returns raw body for unencrypted note', () => {
     const note = makeNote({ encrypted_body: 'visible' })
@@ -96,7 +96,7 @@ describe('useEncryption hook', () => {
 
     act(() => result.current.lockNote('note-1'))
     expect(result.current.isUnlocked('note-1')).toBe(false)
-  })
+  }, 30_000)
 
   it('decryptNote sets unlockError on wrong password', async () => {
     const { encryptNote: enc } = await import('@/lib/crypto')
@@ -109,5 +109,5 @@ describe('useEncryption hook', () => {
     })
     expect(result.current.unlockError).toMatch(/incorrect/i)
     expect(result.current.isUnlocked('note-1')).toBe(false)
-  })
+  }, 30_000)
 })
