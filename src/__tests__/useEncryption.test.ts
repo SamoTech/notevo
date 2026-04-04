@@ -8,14 +8,16 @@ function makeNote(overrides: Partial<DecryptedNote> = {}): DecryptedNote {
     id: 'note-1',
     user_id: 'user-1',
     title: 'Test Note',
-    content: 'Hello world',
+    encrypted_body: 'Hello world',
     is_encrypted: false,
-    is_pinned: false,
-    iv: null,
-    salt: null,
+    pinned: false,
+    iv: '',
+    salt: '',
     tags: [],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    decryptedContent: undefined,
+    isUnlocked: false,
     ...overrides,
   }
 }
@@ -41,7 +43,7 @@ describe('useEncryption hook', () => {
   })
 
   it('encryptNote calls onSave with ciphertext and closes dialog', async () => {
-    const note = makeNote({ content: 'plain text' })
+    const note = makeNote({ encrypted_body: 'plain text' })
     const { result } = renderHook(() => useEncryption(note, saveFn))
 
     act(() => result.current.setShowEncryptDialog(true))
@@ -54,20 +56,21 @@ describe('useEncryption hook', () => {
     const [id, fields] = saveFn.mock.calls[0]
     expect(id).toBe('note-1')
     expect(fields.is_encrypted).toBe(true)
-    expect(fields.content).not.toBe('plain text') // must be ciphertext
+    // encrypted_body must be ciphertext (base64), not the original plaintext
+    expect(fields.encrypted_body).not.toBe('plain text')
     expect(fields.iv).toBeTruthy()
     expect(fields.salt).toBeTruthy()
     expect(result.current.showEncryptDialog).toBe(false)
   })
 
-  it('getDisplayContent returns raw content for unencrypted note', () => {
-    const note = makeNote({ content: 'visible' })
+  it('getDisplayContent returns raw body for unencrypted note', () => {
+    const note = makeNote({ encrypted_body: 'visible' })
     const { result } = renderHook(() => useEncryption(note, saveFn))
     expect(result.current.getDisplayContent(note)).toBe('visible')
   })
 
   it('getDisplayContent returns null for locked encrypted note', () => {
-    const note = makeNote({ is_encrypted: true, content: 'ciphertext' })
+    const note = makeNote({ is_encrypted: true, encrypted_body: 'ciphertext' })
     const { result } = renderHook(() => useEncryption(note, saveFn))
     expect(result.current.getDisplayContent(note)).toBeNull()
   })
@@ -83,7 +86,7 @@ describe('useEncryption hook', () => {
     const { encryptNote: enc } = await import('@/lib/crypto')
     const { ciphertext, iv, salt } = await enc(password, plaintext)
 
-    const note = makeNote({ is_encrypted: true, content: ciphertext, iv, salt })
+    const note = makeNote({ is_encrypted: true, encrypted_body: ciphertext, iv, salt })
     const { result } = renderHook(() => useEncryption(note, saveFn))
 
     await act(async () => {
@@ -98,7 +101,7 @@ describe('useEncryption hook', () => {
   it('decryptNote sets unlockError on wrong password', async () => {
     const { encryptNote: enc } = await import('@/lib/crypto')
     const { ciphertext, iv, salt } = await enc('correct', 'text')
-    const note = makeNote({ is_encrypted: true, content: ciphertext, iv, salt })
+    const note = makeNote({ is_encrypted: true, encrypted_body: ciphertext, iv, salt })
 
     const { result } = renderHook(() => useEncryption(note, saveFn))
     await act(async () => {

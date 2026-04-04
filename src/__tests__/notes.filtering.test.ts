@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { DecryptedNote } from '@/types/note'
 
-// ── helpers (mirror the logic from dashboard/page.tsx) ───────────────────────
+// ── helpers (mirror the logic from useNotes.ts) ───────────────────────────────
 type NoteFilter = 'all' | 'encrypted' | 'plain'
 type SortKey = 'updated' | 'created' | 'title'
 
@@ -10,14 +10,16 @@ function makeNote(overrides: Partial<DecryptedNote> = {}): DecryptedNote {
     id: Math.random().toString(36).slice(2),
     user_id: 'user-1',
     title: 'Untitled',
-    content: '',
+    encrypted_body: '',
     is_encrypted: false,
-    is_pinned: false,
-    iv: null,
-    salt: null,
+    pinned: false,
+    iv: '',
+    salt: '',
     tags: [],
     created_at: new Date(1_000_000).toISOString(),
     updated_at: new Date(1_000_000).toISOString(),
+    decryptedContent: undefined,
+    isUnlocked: false,
     ...overrides,
   }
 }
@@ -28,9 +30,10 @@ function filterNotes(notes: DecryptedNote[], filter: NoteFilter, query: string) 
     if (filter === 'plain' && n.is_encrypted) return false
     if (query) {
       const q = query.toLowerCase()
+      // Never search ciphertext — only search body of plaintext notes.
       return (
         n.title.toLowerCase().includes(q) ||
-        (!n.is_encrypted && n.content.toLowerCase().includes(q))
+        (!n.is_encrypted && n.encrypted_body.toLowerCase().includes(q))
       )
     }
     return true
@@ -39,8 +42,8 @@ function filterNotes(notes: DecryptedNote[], filter: NoteFilter, query: string) 
 
 function sortNotes(notes: DecryptedNote[], sort: SortKey) {
   return [...notes].sort((a, b) => {
-    if (a.is_pinned && !b.is_pinned) return -1
-    if (!a.is_pinned && b.is_pinned) return 1
+    if (a.pinned && !b.pinned) return -1
+    if (!a.pinned && b.pinned) return 1
     if (sort === 'updated') return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
     if (sort === 'created') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     if (sort === 'title') return (a.title ?? '').localeCompare(b.title ?? '')
@@ -51,9 +54,9 @@ function sortNotes(notes: DecryptedNote[], sort: SortKey) {
 // ── filter tests ──────────────────────────────────────────────────────────────
 describe('filterNotes', () => {
   const notes = [
-    makeNote({ id: '1', title: 'Shopping List', is_encrypted: false, content: 'milk, eggs' }),
-    makeNote({ id: '2', title: 'Secret', is_encrypted: true, content: '[encrypted]' }),
-    makeNote({ id: '3', title: 'Work Notes', is_encrypted: false, content: 'standup at 9' }),
+    makeNote({ id: '1', title: 'Shopping List', is_encrypted: false, encrypted_body: 'milk, eggs' }),
+    makeNote({ id: '2', title: 'Secret',        is_encrypted: true,  encrypted_body: '[ciphertext-base64]' }),
+    makeNote({ id: '3', title: 'Work Notes',    is_encrypted: false, encrypted_body: 'standup at 9' }),
   ]
 
   it('returns all notes for filter=all', () => {
@@ -85,8 +88,8 @@ describe('filterNotes', () => {
   })
 
   it('does not search encrypted note body', () => {
-    const result = filterNotes(notes, 'all', '[encrypted]')
-    // the encrypted note's content matches but should not be returned
+    // The encrypted note body contains [ciphertext-base64] but should never match.
+    const result = filterNotes(notes, 'all', '[ciphertext-base64]')
     expect(result).toHaveLength(0)
   })
 
@@ -121,8 +124,8 @@ describe('sortNotes', () => {
 
   it('pinned notes always come first regardless of sort', () => {
     const withPin = [
-      makeNote({ id: 'x', title: 'A Normal', is_pinned: false, updated_at: new Date(now).toISOString() }),
-      makeNote({ id: 'y', title: 'Z Pinned', is_pinned: true, updated_at: new Date(now - 9999).toISOString() }),
+      makeNote({ id: 'x', title: 'A Normal', pinned: false, updated_at: new Date(now).toISOString() }),
+      makeNote({ id: 'y', title: 'Z Pinned', pinned: true,  updated_at: new Date(now - 9999).toISOString() }),
     ]
     const sorted = sortNotes(withPin, 'updated')
     expect(sorted[0].id).toBe('y')
