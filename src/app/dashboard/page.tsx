@@ -213,6 +213,10 @@ function fmtDate(ts: number): string {
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7) }
 
+// Stable IDs for sample notes so they don't resurrect after being deleted
+const SAMPLE_WELCOME_ID = '__sample_welcome__'
+const SAMPLE_CHEATSHEET_ID = '__sample_cheatsheet__'
+
 type ViewMode = 'edit' | 'split' | 'preview'
 type FilterMode = 'all' | 'encrypted' | 'plain'
 type SortMode = 'updated' | 'created' | 'title'
@@ -338,11 +342,8 @@ export default function Dashboard() {
   useEffect(() => {
     const supabase = createClient()
 
-    // Wrap in a real Promise so .catch() is always available
     Promise.resolve(supabase.auth.getUser()).then(({ data: { user } }) => {
       if (!user) {
-        // FIX 1: call setLoading(false) before redirecting so the
-        // component never stays stuck on a blank loading screen.
         setLoading(false)
         router.push('/login')
         return
@@ -355,7 +356,6 @@ export default function Dashboard() {
           .eq('user_id', user.id)
           .order('updated_at', { ascending: false })
       ).then(({ data, error }) => {
-        // FIX 2 & 3: handle error explicitly so setLoading is always called.
         if (error) {
           console.error('Failed to load notes:', error.message)
           setNotes(sampleNotes())
@@ -381,28 +381,31 @@ export default function Dashboard() {
         } else {
           setNotes(sampleNotes())
         }
-        // FIX 4: setLoading(false) is guaranteed on every code path.
         setLoading(false)
       })
     }).catch((err: unknown) => {
-      // FIX 4 (cont): catch unexpected rejections so loading is never
-      // left as true if getUser() or the query itself throws.
       console.error('Unexpected error loading notes:', err)
       setNotes(sampleNotes())
       setLoading(false)
     })
   }, [router])
 
+  // FIX: use stable constant IDs for sample notes so they don't
+  // reappear after the user deletes them (uid() would generate a new
+  // random ID on every page load, making every load look like brand-new
+  // notes that were never deleted).
   function sampleNotes(): LocalNote[] {
     return [
       {
-        id: uid(), title: 'Welcome to Notevo 👋',
+        id: SAMPLE_WELCOME_ID,
+        title: 'Welcome to Notevo 👋',
         body: '# Welcome to Notevo\n\nA **private**, encrypted note-taking app.\n\n## Features\n\n- ✅ Markdown editing with live preview\n- 🔐 AES-256 note encryption\n- 🏷️ Tags for organisation\n- 💾 Auto-save\n- 📌 Pin notes to top\n- 🌍 Multi-language support\n- ↕️ Sort & filter notes\n- 📥 Import / Export\n\nStart editing or press **+** to create a new one.',
         tags: ['welcome', 'demo'], encrypted: false, iv: null, salt: null, pinned: false,
         createdAt: Date.now() - 86400000, updatedAt: Date.now() - 3600000,
       },
       {
-        id: uid(), title: 'Markdown cheatsheet',
+        id: SAMPLE_CHEATSHEET_ID,
+        title: 'Markdown cheatsheet',
         body: '# Markdown Cheatsheet\n\n**Bold**, *Italic*, `inline code`\n\n## Lists\n\n- Item one\n- Item two\n\n## Quote\n\n> The best way to predict the future is to invent it.',
         tags: ['reference'], encrypted: false, iv: null, salt: null, pinned: false,
         createdAt: Date.now() - 3600000, updatedAt: Date.now() - 600000,
@@ -442,6 +445,8 @@ export default function Dashboard() {
   const doSave = useCallback(async () => {
     const id = currentIdRef.current
     if (!id) return
+    // Skip save for sample placeholder notes — they are client-only
+    if (id === SAMPLE_WELCOME_ID || id === SAMPLE_CHEATSHEET_ID) return
     if (isSavingRef.current) return
     isSavingRef.current = true
 
@@ -456,6 +461,9 @@ export default function Dashboard() {
     const titleVal = titleRef.current.trim() || 'Untitled'
     const encrypted_body = note.encrypted ? note.body : bodyRef.current
     const currentTags = tagsRef.current
+    // persistedRef[id] is '' (empty string) for brand-new unsaved notes,
+    // undefined for notes that were never touched, and the real dbId once
+    // they've been inserted. The falsy check handles both '' and undefined.
     const existingDbId = persistedRef.current[id]
 
     if (!existingDbId) {
@@ -474,7 +482,8 @@ export default function Dashboard() {
 
       if (!error && inserted) {
         const dbId: string = inserted.id
-        persistedRef.current[id] = dbId
+        // Clean up the temp local id before replacing with real dbId
+        delete persistedRef.current[id]
         persistedRef.current[dbId] = dbId
         setNotes(prev => prev.map(n =>
           n.id === id
@@ -517,12 +526,17 @@ export default function Dashboard() {
   }, [title, body, tags, currentId, isLocked, doSave])
 
   // ── CREATE NOTE ──
+  // FIX: seed persistedRef immediately with an empty string so doSave()
+  // always finds a defined (falsy) entry and reliably takes the INSERT path.
   const createNote = () => {
     const note: LocalNote = {
       id: uid(), title: '', body: '', tags: [],
       encrypted: false, iv: null, salt: null, pinned: false,
       createdAt: Date.now(), updatedAt: Date.now(),
     }
+    // Mark as "known but not yet persisted" — empty string is falsy so
+    // doSave() will INSERT on the first save attempt.
+    persistedRef.current[note.id] = ''
     setNotes(prev => [note, ...prev])
     setCurrentId(note.id)
     setTitle('')
@@ -545,6 +559,8 @@ export default function Dashboard() {
       updatedAt: Date.now(),
       pinned: false,
     }
+    // Seed as unsaved so it gets INSERTed on first autosave
+    persistedRef.current[copy.id] = ''
     setNotes(prev => [copy, ...prev])
     setCurrentId(copy.id)
     setTitle(copy.title)
@@ -574,6 +590,9 @@ export default function Dashboard() {
       await supabase.from('notes').delete().eq('id', dbId)
       delete persistedRef.current[currentId]
       delete persistedRef.current[dbId]
+    } else {
+      // Remove the unsaved-marker entry too
+      delete persistedRef.current[currentId]
     }
     setNotes(prev => prev.filter(n => n.id !== currentId))
     setCurrentId(null)
@@ -701,6 +720,8 @@ export default function Dashboard() {
         }
 
         if (imported.length === 0) throw new Error('empty')
+        // Seed each imported note as unsaved so autosave INSERTs them
+        imported.forEach(n => { persistedRef.current[n.id] = '' })
         setNotes(prev => [...imported, ...prev])
         showToast(t('importSuccess', { n: imported.length }))
       } catch {
