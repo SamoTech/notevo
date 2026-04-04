@@ -3,6 +3,14 @@ import { renderHook, act } from '@testing-library/react'
 import { useEncryption } from '@/hooks/useEncryption'
 import type { DecryptedNote } from '@/types/note'
 
+// Hoist the actual implementation so both the test helpers and the hook's
+// internal static import share the same module instance and the same
+// crypto.subtle reference — avoiding stale-closure issues in jsdom.
+vi.mock('@/lib/crypto', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/crypto')>('@/lib/crypto')
+  return actual
+})
+
 function makeNote(overrides: Partial<DecryptedNote> = {}): DecryptedNote {
   return {
     id: 'note-1',
