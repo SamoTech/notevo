@@ -222,7 +222,8 @@ type FilterMode = 'all' | 'encrypted' | 'plain'
 type SortMode = 'updated' | 'created' | 'title'
 
 interface LocalNote {
-  id: string
+  id: string        // stable local key — never changes after creation
+  dbId?: string     // real Supabase UUID — set after first INSERT
   title: string
   body: string
   tags: string[]
@@ -232,7 +233,6 @@ interface LocalNote {
   createdAt: number
   updatedAt: number
   pinned?: boolean
-  dbId?: string
 }
 
 export default function Dashboard() {
@@ -271,6 +271,7 @@ export default function Dashboard() {
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isSavingRef = useRef(false)
+  // Maps local note id → real Supabase dbId (or '' for unsaved-but-known)
   const persistedRef = useRef<Record<string, string>>({})
   const currentIdRef = useRef<string | null>(null)
   const notesRef = useRef<LocalNote[]>([])
@@ -364,6 +365,7 @@ export default function Dashboard() {
         }
         if (data && data.length > 0) {
           const mapped: LocalNote[] = data.map((n: Note) => ({
+            // For persisted notes, local id == dbId (stable UUID from Supabase)
             id: n.id,
             dbId: n.id,
             title: n.title,
@@ -390,10 +392,6 @@ export default function Dashboard() {
     })
   }, [router])
 
-  // FIX: use stable constant IDs for sample notes so they don't
-  // reappear after the user deletes them (uid() would generate a new
-  // random ID on every page load, making every load look like brand-new
-  // notes that were never deleted).
   function sampleNotes(): LocalNote[] {
     return [
       {
@@ -461,12 +459,16 @@ export default function Dashboard() {
     const titleVal = titleRef.current.trim() || 'Untitled'
     const encrypted_body = note.encrypted ? note.body : bodyRef.current
     const currentTags = tagsRef.current
-    // persistedRef[id] is '' (empty string) for brand-new unsaved notes,
-    // undefined for notes that were never touched, and the real dbId once
-    // they've been inserted. The falsy check handles both '' and undefined.
+
+    // persistedRef[id] is '' for brand-new unsaved notes (falsy → INSERT),
+    // and the real dbId string once persisted (truthy → UPDATE).
     const existingDbId = persistedRef.current[id]
 
     if (!existingDbId) {
+      // ── INSERT ──
+      // Keep the local `id` stable in React state. Only store the real
+      // Supabase UUID in persistedRef and note.dbId so subsequent saves
+      // can UPDATE correctly — without ever changing note.id.
       const { data: inserted, error } = await supabase.from('notes').insert({
         user_id: user.id,
         title: titleVal,
@@ -482,18 +484,21 @@ export default function Dashboard() {
 
       if (!error && inserted) {
         const dbId: string = inserted.id
-        // Clean up the temp local id before replacing with real dbId
-        delete persistedRef.current[id]
-        persistedRef.current[dbId] = dbId
+        // Map local id → real dbId so future saves take the UPDATE path
+        persistedRef.current[id] = dbId
+        // Patch note.dbId in state (no id change — sidebar key stays stable)
         setNotes(prev => prev.map(n =>
           n.id === id
-            ? { ...n, title: titleVal, body: encrypted_body, tags: currentTags, updatedAt: Date.now(), dbId, id: dbId }
+            ? { ...n, title: titleVal, body: encrypted_body, tags: currentTags, updatedAt: Date.now(), dbId }
             : n
         ))
-        setCurrentId(dbId)
-        currentIdRef.current = dbId
+        // Also update the ref immediately so any in-flight save sees dbId
+        notesRef.current = notesRef.current.map(n =>
+          n.id === id ? { ...n, dbId } : n
+        )
       }
     } else {
+      // ── UPDATE ──
       await supabase.from('notes').update({
         title: titleVal,
         encrypted_body,
@@ -526,16 +531,13 @@ export default function Dashboard() {
   }, [title, body, tags, currentId, isLocked, doSave])
 
   // ── CREATE NOTE ──
-  // FIX: seed persistedRef immediately with an empty string so doSave()
-  // always finds a defined (falsy) entry and reliably takes the INSERT path.
   const createNote = () => {
     const note: LocalNote = {
       id: uid(), title: '', body: '', tags: [],
       encrypted: false, iv: null, salt: null, pinned: false,
       createdAt: Date.now(), updatedAt: Date.now(),
     }
-    // Mark as "known but not yet persisted" — empty string is falsy so
-    // doSave() will INSERT on the first save attempt.
+    // '' is falsy → doSave will take the INSERT path on first save
     persistedRef.current[note.id] = ''
     setNotes(prev => [note, ...prev])
     setCurrentId(note.id)
@@ -559,7 +561,6 @@ export default function Dashboard() {
       updatedAt: Date.now(),
       pinned: false,
     }
-    // Seed as unsaved so it gets INSERTed on first autosave
     persistedRef.current[copy.id] = ''
     setNotes(prev => [copy, ...prev])
     setCurrentId(copy.id)
@@ -573,7 +574,8 @@ export default function Dashboard() {
     if (!currentNote) return
     const newPinned = !currentNote.pinned
     setNotes(prev => prev.map(n => n.id === currentId ? { ...n, pinned: newPinned } : n))
-    const dbId = persistedRef.current[currentId!]
+    // Use note.dbId (reliable) or fall back to persistedRef
+    const dbId = currentNote.dbId || persistedRef.current[currentId!]
     if (dbId) {
       const supabase = createClient()
       await supabase.from('notes').update({ pinned: newPinned }).eq('id', dbId)
@@ -584,16 +586,13 @@ export default function Dashboard() {
   const deleteNote = async () => {
     if (!currentId || !currentNote) return
     if (!confirm(t('deleteConfirm'))) return
-    const dbId = persistedRef.current[currentId]
+    // Use note.dbId (reliable) or fall back to persistedRef
+    const dbId = currentNote.dbId || persistedRef.current[currentId]
     if (dbId) {
       const supabase = createClient()
       await supabase.from('notes').delete().eq('id', dbId)
-      delete persistedRef.current[currentId]
-      delete persistedRef.current[dbId]
-    } else {
-      // Remove the unsaved-marker entry too
-      delete persistedRef.current[currentId]
     }
+    delete persistedRef.current[currentId]
     setNotes(prev => prev.filter(n => n.id !== currentId))
     setCurrentId(null)
     setTitle('')
@@ -720,7 +719,6 @@ export default function Dashboard() {
         }
 
         if (imported.length === 0) throw new Error('empty')
-        // Seed each imported note as unsaved so autosave INSERTs them
         imported.forEach(n => { persistedRef.current[n.id] = '' })
         setNotes(prev => [...imported, ...prev])
         showToast(t('importSuccess', { n: imported.length }))
