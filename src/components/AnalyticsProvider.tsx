@@ -10,7 +10,7 @@
  * by CookieBanner so it reacts immediately without a page reload.
  */
 import { useEffect, useState } from 'react'
-import { Analytics } from '@vercel/analytics/react'
+import { Analytics, type BeforeSendEvent } from '@vercel/analytics/react'
 
 const STORAGE_KEY = 'notevo_cookie_ok'
 
@@ -44,7 +44,8 @@ export default function AnalyticsProvider() {
     <Analytics
       // beforeSend is a final safety net: re-check consent on every event
       // in case localStorage was cleared between renders.
-      beforeSend={() => (hasConsent() ? undefined : null)}
+      // BeforeSend signature requires BeforeSendEvent | null (not undefined).
+      beforeSend={(event: BeforeSendEvent) => (hasConsent() ? event : null)}
     />
   )
 }
