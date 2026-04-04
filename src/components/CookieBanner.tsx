@@ -5,6 +5,13 @@ import Link from 'next/link'
 
 const STORAGE_KEY = 'notevo_cookie_ok'
 
+/** Dispatch a custom event so AnalyticsProvider reacts immediately. */
+function broadcastConsent(accepted: boolean) {
+  window.dispatchEvent(
+    new CustomEvent('notevo:consent', { detail: { accepted } })
+  )
+}
+
 export default function CookieBanner() {
   const [visible, setVisible] = useState(false)
 
@@ -25,6 +32,7 @@ export default function CookieBanner() {
     try {
       localStorage.setItem(STORAGE_KEY, accepted ? 'yes' : 'declined')
     } catch { /* noop */ }
+    broadcastConsent(accepted)
     setVisible(false)
   }
 

@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import './legal.css'
 import CookieBanner from '@/components/CookieBanner'
+import AnalyticsProvider from '@/components/AnalyticsProvider'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -39,6 +40,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         {children}
+        {/* Analytics is injected client-side only after cookie consent */}
+        <AnalyticsProvider />
         <CookieBanner />
       </body>
     </html>
