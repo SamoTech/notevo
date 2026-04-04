@@ -217,6 +217,25 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 const SAMPLE_WELCOME_ID = '__sample_welcome__'
 const SAMPLE_CHEATSHEET_ID = '__sample_cheatsheet__'
 
+// ── FIX #2: Persist dismissed sample note IDs in localStorage ──
+const DISMISSED_SAMPLES_KEY = 'notevo-dismissed-samples'
+
+function getDismissedSamples(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(DISMISSED_SAMPLES_KEY) || '[]'))
+  } catch {
+    return new Set()
+  }
+}
+
+function dismissSample(id: string) {
+  try {
+    const dismissed = getDismissedSamples()
+    dismissed.add(id)
+    localStorage.setItem(DISMISSED_SAMPLES_KEY, JSON.stringify([...dismissed]))
+  } catch { /* ignore */ }
+}
+
 type ViewMode = 'edit' | 'split' | 'preview'
 type FilterMode = 'all' | 'encrypted' | 'plain'
 type SortMode = 'updated' | 'created' | 'title'
@@ -381,7 +400,9 @@ export default function Dashboard() {
           mapped.forEach(n => { persistedRef.current[n.id] = n.id })
           setNotes(mapped)
         } else {
-          setNotes(sampleNotes())
+          // ── FIX #2: Only show sample notes that haven't been dismissed ──
+          const samples = sampleNotes()
+          if (samples.length > 0) setNotes(samples)
         }
         setLoading(false)
       })
@@ -392,8 +413,10 @@ export default function Dashboard() {
     })
   }, [router])
 
+  // ── FIX #2: Filter dismissed samples on load ──
   function sampleNotes(): LocalNote[] {
-    return [
+    const dismissed = getDismissedSamples()
+    const all: LocalNote[] = [
       {
         id: SAMPLE_WELCOME_ID,
         title: 'Welcome to Notevo 👋',
@@ -409,6 +432,7 @@ export default function Dashboard() {
         createdAt: Date.now() - 3600000, updatedAt: Date.now() - 600000,
       }
     ]
+    return all.filter(n => !dismissed.has(n.id))
   }
 
   // ── WORD COUNT ──
@@ -457,6 +481,8 @@ export default function Dashboard() {
     if (!user) { isSavingRef.current = false; return }
 
     const titleVal = titleRef.current.trim() || 'Untitled'
+    // ── FIX #1: Always read from notesRef for encrypted body (already ciphertext),
+    //    or bodyRef for plaintext. notesRef is kept in sync before doSave is called.
     const encrypted_body = note.encrypted ? note.body : bodyRef.current
     const currentTags = tagsRef.current
 
@@ -586,6 +612,10 @@ export default function Dashboard() {
   const deleteNote = async () => {
     if (!currentId || !currentNote) return
     if (!confirm(t('deleteConfirm'))) return
+    // ── FIX #2: Dismiss sample notes so they don't resurface after reload ──
+    if (currentId === SAMPLE_WELCOME_ID || currentId === SAMPLE_CHEATSHEET_ID) {
+      dismissSample(currentId)
+    }
     // Use note.dbId (reliable) or fall back to persistedRef
     const dbId = currentNote.dbId || persistedRef.current[currentId]
     if (dbId) {
@@ -736,35 +766,56 @@ export default function Dashboard() {
     setEncryptOpen(true)
   }
 
+  // ── FIX #3 & #4: Encrypt/Decrypt + immediate persist ──
   const doEncryptAction = async () => {
     if (!currentNote) return
     if (currentNote.encrypted) {
+      // ── DECRYPT ──
       if (!epDecPass) { setEpDecErr(t('enterPassErr')); return }
       try {
         const result = await decryptNote(epDecPass, currentNote.body, currentNote.iv!, currentNote.salt!)
         if (result.success && result.text) {
+          const decryptedBody = result.text
+          // FIX #4: Synchronously update notesRef so doSave reads correct plaintext
+          notesRef.current = notesRef.current.map(n =>
+            n.id === currentId
+              ? { ...n, body: decryptedBody, encrypted: false, iv: null, salt: null }
+              : n
+          )
           setNotes(prev => prev.map(n => n.id === currentId
-            ? { ...n, body: result.text, encrypted: false, iv: null, salt: null }
+            ? { ...n, body: decryptedBody, encrypted: false, iv: null, salt: null }
             : n
           ))
           setUnlocked(prev => { const next = { ...prev }; delete next[currentId!]; return next })
-          setBody(result.text)
+          setBody(decryptedBody)
+          bodyRef.current = decryptedBody
           setEncryptOpen(false)
+          // FIX #3: Persist the decrypted state immediately
+          setTimeout(doSave, 50)
         } else {
           setEpDecErr(t('incorrectPass'))
         }
       } catch { setEpDecErr(t('incorrectPass')) }
     } else {
+      // ── ENCRYPT ──
       if (!epPass) { setEpErr(t('enterAPass')); return }
       if (epPass !== epConfirm) { setEpErr(t('passMismatch')); return }
       if (epPass.length < 4) { setEpErr(t('passShort')); return }
       const { ciphertext, iv, salt } = await encryptNote(epPass, body)
+      // FIX #1 & #3: Synchronously update notesRef with ciphertext BEFORE doSave reads it
+      notesRef.current = notesRef.current.map(n =>
+        n.id === currentId
+          ? { ...n, body: ciphertext, encrypted: true, iv, salt }
+          : n
+      )
       setUnlocked(prev => ({ ...prev, [currentId!]: body }))
       setNotes(prev => prev.map(n => n.id === currentId
         ? { ...n, body: ciphertext, encrypted: true, iv, salt }
         : n
       ))
       setEncryptOpen(false)
+      // FIX #3: Persist the encrypted state immediately
+      setTimeout(doSave, 50)
     }
   }
 
