@@ -20,6 +20,19 @@
 ---
 
 <!-- DEVLENS:START -->
+![DevLens Health](https://img.shields.io/badge/DevLens%20Health-83%2F100-brightgreen?style=flat-square&logo=github) **Overall health: 83/100** — *Last updated: 2026-04-06*
+
+| Dimension | Progress | Score | Weight |
+|---|---|---|---|
+| 📝 **README Quality** | `█████████░` | ![90](https://img.shields.io/badge/90-brightgreen?style=flat-square) | 20% |
+| 🔥 **Commit Activity** | `██████████` | ![100](https://img.shields.io/badge/100-brightgreen?style=flat-square) | 20% |
+| 🌿 **Repo Freshness** | `██████████` | ![100](https://img.shields.io/badge/100-brightgreen?style=flat-square) | 15% |
+| 📚 **Documentation** | `███░░░░░░░` | ![32](https://img.shields.io/badge/32-red?style=flat-square) | 15% |
+| ⚙️ **CI/CD Setup** | `██████████` | ![100](https://img.shields.io/badge/100-brightgreen?style=flat-square) | 15% |
+| 🎯 **Issue Response** | `██████████` | ![100](https://img.shields.io/badge/100-brightgreen?style=flat-square) | 10% |
+| ⭐ **Community Signal** | `█░░░░░░░░░` | ![10](https://img.shields.io/badge/10-red?style=flat-square) | 5% |
+
+Improving the documentation score by addressing the low community engagement may provide the greatest immediate impact on raising the overall DevLens repo health score.
 <!-- DEVLENS:END -->
 
 ---
