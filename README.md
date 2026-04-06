@@ -19,6 +19,11 @@
 
 ---
 
+<!-- DEVLENS:START -->
+<!-- DEVLENS:END -->
+
+---
+
 ## Why Notevo?
 
 [Laverna](https://github.com/Laverna/laverna) was one of the best open-source encrypted note apps — 10k+ stars, beloved by the privacy community. It hasn't been updated since 2019 and has [438 open issues](https://github.com/Laverna/laverna/issues). Notevo is its spiritual successor: same zero-knowledge encryption philosophy, rebuilt for 2026 with a modern stack, active maintenance, and a promise to stay **free forever**.
@@ -182,10 +187,3 @@ Built with ❤️ by [Ossama Hashim](https://github.com/SamoTech) · [notevo-io.
 *Free forever. Private by design.*
 
 </div>
-
-
-<!-- DEVLENS:START -->
-## Repo Health
-![DevLens Health](https://img.shields.io/badge/DevLens%20Health-78%2F100-green?style=flat&logo=github)
-Note: The health score of this repository is 78/100, with areas needing improvement such as documentation.
-<!-- DEVLENS:END -->
