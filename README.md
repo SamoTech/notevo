@@ -187,5 +187,5 @@ Built with ❤️ by [Ossama Hashim](https://github.com/SamoTech) · [notevo-io.
 <!-- DEVLENS:START -->
 ## Repo Health
 ![DevLens Health](https://img.shields.io/badge/DevLens%20Health-78%2F100-green?style=flat&logo=github)
-**Score: 78/100** — [DevLens](https://github.com/SamoTech/devlens)
+Note: The health score of this repository is 78/100, with areas needing improvement such as documentation.
 <!-- DEVLENS:END -->
