@@ -32,7 +32,7 @@
 | 🎯 **Issue Response** | `██████████` | ![100](https://img.shields.io/badge/100-brightgreen?style=flat-square) | 10% |
 | ⭐ **Community Signal** | `█░░░░░░░░░` | ![10](https://img.shields.io/badge/10-red?style=flat-square) | 5% |
 
-The DevLens repo needs improvement in documentation maintenance with a score of 48, to bring the overall health score closer to its maximum potential.
+The DevLens repo has a low "docs" score, which suggests that the documentation may need improvement.
 <!-- DEVLENS:END -->
 
 ---
