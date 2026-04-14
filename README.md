@@ -22,17 +22,19 @@
 ---
 
 <!-- DEVLENS:START -->
-![DevLens Health](https://img.shields.io/badge/DevLens%20Health-85%2F100-brightgreen?style=flat-square&logo=github) **Overall health: 85/100** — *Last updated: 2026-04-14*
+![DevLens Health](https://img.shields.io/badge/DevLens%20Health-82%2F100-brightgreen?style=flat-square&logo=github) **Overall health: 82/100** — *Last updated: 2026-04-14*
 
 | Dimension | Progress | Score | Weight |
 |---|---|---|---|
-| 📝 **README Quality** | `█████████░` | ![90](https://img.shields.io/badge/90-brightgreen?style=flat-square) | 20% |
+| 📝 **README Quality** | `███████░░░` | ![72](https://img.shields.io/badge/72-green?style=flat-square) | 20% |
 | 🔥 **Commit Activity** | `██████████` | ![100](https://img.shields.io/badge/100-brightgreen?style=flat-square) | 20% |
 | 🌿 **Repo Freshness** | `██████████` | ![100](https://img.shields.io/badge/100-brightgreen?style=flat-square) | 15% |
 | 📚 **Documentation** | `█████░░░░░` | ![48](https://img.shields.io/badge/48-yellow?style=flat-square) | 15% |
 | ⚙️ **CI/CD Setup** | `██████████` | ![100](https://img.shields.io/badge/100-brightgreen?style=flat-square) | 15% |
 | 🎯 **Issue Response** | `██████████` | ![100](https://img.shields.io/badge/100-brightgreen?style=flat-square) | 10% |
 | ⭐ **Community Signal** | `█░░░░░░░░░` | ![10](https://img.shields.io/badge/10-red?style=flat-square) | 5% |
+
+Improving the "docs" score from the current 48 to the same level as the "readme" score of 72 could significantly boost the overall DevLens repo health score.
 <!-- DEVLENS:END -->
 
 ---
