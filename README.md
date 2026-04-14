@@ -34,7 +34,7 @@
 | 🎯 **Issue Response** | `██████████` | ![100](https://img.shields.io/badge/100-brightgreen?style=flat-square) | 10% |
 | ⭐ **Community Signal** | `█░░░░░░░░░` | ![10](https://img.shields.io/badge/10-red?style=flat-square) | 5% |
 
-Improving the "docs" score from the current 48 to the same level as the "readme" score of 72 could significantly boost the overall DevLens repo health score.
+Improving the documentation quality, currently scored at 48, is a key area to focus on for enhancing the overall score of the DevLens repository.
 <!-- DEVLENS:END -->
 
 ---
