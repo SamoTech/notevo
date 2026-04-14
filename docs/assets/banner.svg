@@ -1,19 +1,44 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="200" viewBox="0 0 900 200">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0d1117"/><stop offset="100%" stop-color="#161b22"/></linearGradient>
-    <linearGradient id="stripe" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10b981" stop-opacity="1"/><stop offset="100%" stop-color="#10b981" stop-opacity="0.4"/></linearGradient>
-    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#10b981" stop-opacity="0.15"/><stop offset="60%" stop-color="#10b981" stop-opacity="0"/></linearGradient>
+    <linearGradient id="bg-nv" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d1117;stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:#1a1f2e;stop-opacity:1"/>
+    </linearGradient>
   </defs>
-  <rect width="900" height="200" fill="url(#bg)" rx="12"/>
-  <rect width="500" height="200" fill="url(#glow)" rx="12"/>
-  <rect x="0" y="0" width="5" height="200" fill="url(#stripe)" rx="2"/>
-  <pattern id="dots" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#10b981" opacity="0.06"/></pattern>
-  <rect width="900" height="200" fill="url(#dots)" rx="12"/>
-  <circle cx="820" cy="100" r="55" fill="#10b981" opacity="0.08"/>
-  <circle cx="820" cy="100" r="40" fill="#10b981" opacity="0.10"/>
-  <text x="820" y="112" font-family="system-ui,sans-serif" font-size="36" text-anchor="middle" fill="#6ee7b7" opacity="0.9">🔐</text>
-  <text x="48" y="90" font-family="system-ui,-apple-system,sans-serif" font-size="42" font-weight="800" fill="#f0f6fc" letter-spacing="-0.5">Notevo</text>
-  <text x="48" y="125" font-family="system-ui,sans-serif" font-size="17" font-weight="400" fill="#8b949e">Private encrypted notes · Markdown · AES-GCM</text>
-  <line x1="48" y1="175" x2="300" y2="175" stroke="#10b981" stroke-width="1.5" opacity="0.4"/>
-  <text x="48" y="193" font-family="system-ui,sans-serif" font-size="12" fill="#10b981" opacity="0.6" letter-spacing="1">SAMOTECH · github.com/SamoTech</text>
+  <rect width="1200" height="300" fill="url(#bg-nv)" rx="12"/>
+  <pattern id="dots" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
+    <circle cx="2" cy="2" r="1" fill="#1e293b"/>
+  </pattern>
+  <rect width="1200" height="300" fill="url(#dots)" rx="12"/>
+  <rect x="0" y="0" width="6" height="300" fill="#4f98a3" rx="3"/>
+  <g transform="translate(55, 95)">
+    <rect x="8" y="38" width="64" height="46" rx="8" fill="#4f98a3" fill-opacity="0.2" stroke="#4f98a3" stroke-width="2"/>
+    <path d="M20 38 V26 C20 10 60 10 60 26 V38" fill="none" stroke="#4f98a3" stroke-width="2.5" stroke-linecap="round"/>
+    <circle cx="40" cy="58" r="7" fill="#4f98a3"/>
+    <line x1="40" y1="65" x2="40" y2="74" stroke="#4f98a3" stroke-width="3" stroke-linecap="round"/>
+    <ellipse cx="40" cy="61" rx="38" ry="38" fill="none" stroke="#4f98a3" stroke-width="1" stroke-opacity="0.2" stroke-dasharray="4 4"/>
+  </g>
+  <text x="200" y="145" font-family="'Segoe UI', system-ui, sans-serif" font-size="78" font-weight="700" fill="#e2e8f0" letter-spacing="-3">Notevo</text>
+  <text x="202" y="185" font-family="'Segoe UI', system-ui, sans-serif" font-size="22" fill="#4f98a3">Private · Encrypted · Free forever</text>
+  <rect x="202" y="208" width="100" height="28" rx="14" fill="#4f98a3" fill-opacity="0.15" stroke="#4f98a3" stroke-width="1"/>
+  <text x="252" y="227" font-family="'Segoe UI', system-ui, sans-serif" font-size="13" fill="#4f98a3" text-anchor="middle">AES-256</text>
+  <rect x="314" y="208" width="108" height="28" rx="14" fill="#4f98a3" fill-opacity="0.15" stroke="#4f98a3" stroke-width="1"/>
+  <text x="368" y="227" font-family="'Segoe UI', system-ui, sans-serif" font-size="13" fill="#4f98a3" text-anchor="middle">Markdown</text>
+  <rect x="434" y="208" width="108" height="28" rx="14" fill="#4f98a3" fill-opacity="0.15" stroke="#4f98a3" stroke-width="1"/>
+  <text x="488" y="227" font-family="'Segoe UI', system-ui, sans-serif" font-size="13" fill="#4f98a3" text-anchor="middle">Supabase</text>
+  <g transform="translate(850, 80)">
+    <rect x="0" y="0" width="280" height="160" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+    <rect x="0" y="0" width="280" height="36" rx="10" fill="#273344"/>
+    <rect x="0" y="26" width="280" height="10" fill="#273344"/>
+    <circle cx="18" cy="18" r="6" fill="#4f98a3" fill-opacity="0.5"/>
+    <text x="34" y="23" font-family="monospace" font-size="13" fill="#94a3b8">My Encrypted Note</text>
+    <line x1="16" y1="60" x2="264" y2="60" stroke="#334155" stroke-width="1"/>
+    <line x1="16" y1="80" x2="240" y2="80" stroke="#334155" stroke-width="1"/>
+    <line x1="16" y1="100" x2="200" y2="100" stroke="#334155" stroke-width="1"/>
+    <line x1="16" y1="120" x2="220" y2="120" stroke="#334155" stroke-width="1"/>
+    <line x1="16" y1="140" x2="180" y2="140" stroke="#334155" stroke-width="1"/>
+    <text x="16" y="58" font-family="monospace" font-size="11" fill="#4f98a3">## Secret Plans</text>
+    <text x="16" y="78" font-family="monospace" font-size="11" fill="#64748b">Only you can read this...</text>
+    <text x="16" y="98" font-family="monospace" font-size="11" fill="#64748b">&#x1F510; AES-256-GCM encrypted</text>
+  </g>
 </svg>
