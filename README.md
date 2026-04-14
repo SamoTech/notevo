@@ -32,7 +32,7 @@
 | 🎯 **Issue Response** | `██████████` | ![100](https://img.shields.io/badge/100-brightgreen?style=flat-square) | 10% |
 | ⭐ **Community Signal** | `█░░░░░░░░░` | ![10](https://img.shields.io/badge/10-red?style=flat-square) | 5% |
 
-Improving the documentation score, which is currently the lowest, will have the most significant impact on increasing the overall DevLens repo health score.
+The DevLens repo needs improvement in documentation maintenance with a score of 48, to bring the overall health score closer to its maximum potential.
 <!-- DEVLENS:END -->
 
 ---
