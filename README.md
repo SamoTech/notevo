@@ -1,5 +1,7 @@
 <div align="center">
 
+![Notevo](docs/assets/banner.svg)
+
 <img src="public/logo.svg" alt="Notevo Logo" width="64" height="64" />
 
 # Notevo
@@ -31,8 +33,6 @@
 | ⚙️ **CI/CD Setup** | `██████████` | ![100](https://img.shields.io/badge/100-brightgreen?style=flat-square) | 15% |
 | 🎯 **Issue Response** | `██████████` | ![100](https://img.shields.io/badge/100-brightgreen?style=flat-square) | 10% |
 | ⭐ **Community Signal** | `█░░░░░░░░░` | ![10](https://img.shields.io/badge/10-red?style=flat-square) | 5% |
-
-Improve the repository's documentation by addressing the low "docs" score, currently at 48, to enhance the overall health score of DevLens.
 <!-- DEVLENS:END -->
 
 ---
@@ -99,97 +99,15 @@ Open [http://localhost:3000](http://localhost:3000) — that's it.
 
 ---
 
-## Database Setup
-
-Migrations live in `supabase/migrations/`. Apply them via the Supabase CLI:
-
-```bash
-npx supabase db push
-```
-
-Or copy the SQL from `supabase/migrations/` into the Supabase SQL editor manually.
-
----
-
 ## Deploy to Vercel
 
-One-click deploy — the fastest way to get your own private Notevo instance:
-
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSamoTech%2Fnotevo)
-
-Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in the Vercel environment variables panel during setup.
-
----
-
-## Pages & Legal
-
-Notevo ships with complete, production-ready legal and informational pages:
-
-| Page | Route | Description |
-|---|---|---|
-| About | `/about` | What Notevo is and how it works |
-| Privacy Policy | `/privacy` | GDPR · CCPA · COPPA compliant — zero data collection |
-| Terms of Service | `/terms` | Free-forever commitment · MIT license · no warranty |
-| Cookie Policy | `/cookies` | No tracking cookies · localStorage only · PECR compliant |
-| Sponsor | `/sponsor` | Support the project — keep it free for everyone |
-
----
-
-## ❤️ Sponsor
-
-Notevo is free — and will stay free forever. But hosting, infra, and development take real time and money.
-
-If Notevo saves you time or protects your privacy, consider supporting it:
-
-**→ [github.com/sponsors/SamoTech](https://github.com/sponsors/SamoTech)**
-
-| Tier | Amount | What it covers |
-|---|---|---|
-| ☕ Coffee | $3 one-time | Fuels a bug fix |
-| ❤️ Monthly | $5 / month | Hosting & infrastructure |
-| 🌟 Patron | $20 / month | Your name in the README |
-
-Can't sponsor? **Star the repo** ⭐ and share it with someone who values privacy. It means a lot.
-
-> Notevo will never show ads, sell your data, or add paywalls — no matter what. This is a promise.
-
----
-
-## Contributing
-
-PRs are welcome! Here's how to get started:
-
-1. Fork the repo and create a feature branch: `git checkout -b feat/my-feature`
-2. Make your changes and test locally
-3. Run `npm run lint` and `npm run build` — both must pass
-4. Open a PR with a clear description of what changed and why
-
-Issues labelled [`good first issue`](https://github.com/SamoTech/notevo/labels/good%20first%20issue) are a great starting point.
-
-**Migrating from Laverna?** Open an issue — making that migration path seamless is a top priority.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for full guidelines.
-
----
-
-## Roadmap
-
-- [ ] Mobile PWA (installable on iOS/Android)
-- [ ] Note sharing with expiring links
-- [ ] Folder / notebook hierarchy
-- [ ] Rich text (WYSIWYG) mode alongside Markdown
-- [ ] Self-hosted Docker image
-- [ ] Browser extension for quick capture
-
-Have an idea? [Open an issue](https://github.com/SamoTech/notevo/issues/new) — community input shapes the roadmap.
 
 ---
 
 ## License
 
 **MIT** — fork it, self-host it, build on it, own it.
-
-See [LICENSE](LICENSE) for the full text.
 
 ---
 
